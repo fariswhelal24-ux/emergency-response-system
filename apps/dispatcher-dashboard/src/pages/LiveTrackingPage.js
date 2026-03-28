@@ -1,0 +1,7 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+export const LiveTrackingPage = ({ detail, onCloseCase }) => {
+    if (!detail) {
+        return _jsx("div", { className: "empty-state", children: "Select a case first." });
+    }
+    return (_jsxs("section", { className: "tracking-grid", children: [_jsxs("article", { className: "panel", children: [_jsx("header", { className: "panel__header", children: _jsx("h3", { children: "Real-Time Map Tracking" }) }), _jsxs("div", { className: "map-surface map-surface--large", children: [_jsx("div", { className: "map-pill map-pill--incident", children: "Patient" }), _jsx("div", { className: "map-pill map-pill--ambulance", children: "Ambulance" }), _jsx("div", { className: "map-pill map-pill--volunteer", children: "Volunteer" })] })] }), _jsxs("article", { className: "panel", children: [_jsx("header", { className: "panel__header", children: _jsx("h3", { children: "Activity Feed" }) }), _jsx("div", { className: "timeline-list", children: detail.timeline.map((entry) => (_jsxs("div", { className: "timeline-item", children: [_jsx("p", { className: "timeline-title", children: entry.updateType.replaceAll("_", " ") }), _jsx("p", { children: entry.message })] }, entry.id))) }), _jsxs("div", { className: "button-row", children: [_jsx("button", { children: "Call Patient" }), _jsx("button", { children: "Call Volunteer" }), _jsx("button", { children: "Call Ambulance Unit" }), _jsx("button", { children: "Send Update" }), _jsx("button", { onClick: onCloseCase, children: "Close Case" })] })] })] }));
+};

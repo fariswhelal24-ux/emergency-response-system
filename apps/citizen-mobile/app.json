@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Citizen Emergency",
+    "slug": "citizen-emergency",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "f9395d83-b2d7-44f2-97bf-653b6c7a9970"
+      }
+    },
+    "owner": "farishelal"
+  }
+}

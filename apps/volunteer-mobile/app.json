@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "Volunteer Response",
+    "slug": "volunteer-response",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light"
+  }
+}

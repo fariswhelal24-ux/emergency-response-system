@@ -1,0 +1,19 @@
+{
+  "name": "real-time-emergency-response-system",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm --workspace @ers/api run dev",
+    "migrate:api": "npm --workspace @ers/api run migrate",
+    "dev:citizen": "npm --workspace @ers/citizen-mobile run start",
+    "dev:volunteer": "npm --workspace @ers/volunteer-mobile run start",
+    "dev:dispatcher": "npm --workspace @ers/dispatcher-dashboard run dev",
+    "build:dispatcher": "npm --workspace @ers/dispatcher-dashboard run build",
+    "check:api": "npm --workspace @ers/api run check"
+  }
+}
