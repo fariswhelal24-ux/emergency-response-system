@@ -25,6 +25,8 @@ import AIAssistantService from "./shared/services/ai-assistant";
 import { asyncHandler } from "./shared/utils/asyncHandler";
 
 export const app = express();
+// Required when clients send X-Forwarded-For (proxies, some dev tools); otherwise express-rate-limit throws.
+app.set("trust proxy", 1);
 
 const DEV_LOCAL_ORIGIN_PATTERN = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i;
 const DEV_LAN_ORIGIN_PATTERN =
