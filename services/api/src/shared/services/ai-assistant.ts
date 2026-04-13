@@ -8,6 +8,7 @@ type AssistantIntent = "medical_question" | "emergency" | "appointment" | "gener
 
 interface ConversationContext {
   userId?: string;
+  modelOverride?: string;
   history: Array<{
     role: "user" | "assistant";
     content: string;
@@ -55,6 +56,7 @@ type SymptomKey =
 
 const client = env.openaiApiKey ? new OpenAI({ apiKey: env.openaiApiKey }) : null;
 let openAICooldownUntil = 0;
+const OPENAI_CHAT_TIMEOUT_MS = 9_000;
 
 const VALID_INTENTS: AssistantIntent[] = [
   "medical_question",
@@ -232,6 +234,39 @@ const setOpenAICooldown = (milliseconds: number): void => {
   openAICooldownUntil = Date.now() + milliseconds;
 };
 
+class OpenAITimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`OpenAI request timed out after ${timeoutMs}ms`);
+    this.name = "OpenAITimeoutError";
+  }
+}
+
+const withOpenAITimeout = async <T>(promise: Promise<T>, timeoutMs: number = OPENAI_CHAT_TIMEOUT_MS): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new OpenAITimeoutError(timeoutMs)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+};
+
+const buildModelCandidates = (preferred?: string): string[] => {
+  return Array.from(
+    new Set([
+      (preferred || "").trim(),
+      (env.openaiModel || "").trim(),
+      "gpt-4.1-mini"
+    ].filter((value) => value.length > 0))
+  );
+};
+
 const defaultAnalysis = (intent: AssistantIntent = "medical_question", keywords: string[] = []): AssistantAnalysis => ({
   intent,
   confidence: intent === "emergency" ? 0.92 : 0.6,
@@ -277,6 +312,17 @@ const containsBreathing = (text: string): boolean =>
 
 const containsUnconscious = (text: string): boolean =>
   /(unconscious|not responsive|passed out|fainted|فاقد الوعي|غير واعي|لا يستجيب|مغمى عليه)/i.test(text);
+
+const mentionsAccidentOrTrauma = (text: string): boolean =>
+  /(accident|car crash|collision|road traffic|injury|injured|trauma|حادث|اصطدام|دهس|إصابة|اصابة)/i.test(text);
+
+const mentionsWoundOrCut = (text: string): boolean =>
+  /(wound|cut|laceration|open wound|جرح|خدش|قطع)/i.test(text);
+
+const mentionsSevereTraumaRedFlags = (text: string): boolean =>
+  /(severe bleeding|heavy bleeding|bleeding won't stop|head injury|neck pain|spine injury|cannot move|broken bone|fracture|difficulty breathing|chest pain|نزيف شديد|النزيف لا يتوقف|إصابة رأس|اصابة رأس|ألم رقبة شديد|إصابة عمود فقري|اصابة عمود فقري|كسر|لا يستطيع الحركة|ضيق تنفس|ألم صدر)/i.test(
+    text
+  );
 
 const extractSymptomsFromText = (text: string): SymptomKey[] => {
   const found = new Set<SymptomKey>();
@@ -331,6 +377,15 @@ const extractFollowUpQuestions = (response: string): string[] =>
     .filter(Boolean)
     .filter((line) => line.endsWith("?") || line.endsWith("؟"))
     .slice(0, 2);
+
+const appendRequiredClosingLine = (response: string): string => {
+  const required = "If symptoms get worse, consider seeking medical help.";
+  if (response.includes(required)) {
+    return response;
+  }
+
+  return `${response.trim()}\n\n${required}`;
+};
 
 const buildDirectFirstAidAnswer = (
   userMessage: string,
@@ -425,6 +480,46 @@ const buildDirectFirstAidAnswer = (
       isEmergency: true,
       intent: "emergency",
       keywords: ["bleeding"]
+    };
+  }
+
+  if (mentionsAccidentOrTrauma(message) || mentionsWoundOrCut(message)) {
+    const highRiskTrauma =
+      notBreathing || unconscious || mentionsSevereTraumaRedFlags(message) || /critical|حرج|خطير جداً|خطير جدا/i.test(message);
+
+    if (highRiskTrauma) {
+      return {
+        response:
+          language === "ar"
+            ? "هذه إصابة حادث وقد تكون خطيرة.\n\nافعل الآن:\n1. اتصل بالإسعاف فوراً\n2. ثبّت المصاب وتجنب تحريك الرقبة أو الظهر إذا في شك بإصابة قوية\n3. اضغط مباشرة على أي نزيف شديد\n4. راقب التنفس والوعي حتى وصول الطاقم"
+            : "This accident-related injury may be serious.\n\nDo this now:\n1. Call emergency services immediately\n2. Keep the person still and avoid moving the neck/back if major injury is possible\n3. Apply firm direct pressure to any severe bleeding\n4. Monitor breathing and consciousness until help arrives",
+        followUpQuestions: [
+          language === "ar"
+            ? "هل يوجد نزيف شديد مستمر أو فقدان وعي الآن؟"
+            : "Is there ongoing heavy bleeding or loss of consciousness right now?"
+        ],
+        isEmergency: true,
+        intent: "emergency",
+        keywords: ["accident", "trauma", "injury"]
+      };
+    }
+
+    return {
+      response:
+        language === "ar"
+          ? "طالما الوضع مستقر والجرح بسيط، اتبع هذه الخطوات:\n1. اغسل يديك ثم اضغط على الجرح إذا في نزيف خفيف\n2. نظّف الجرح بماء جارٍ نظيف أو محلول ملحي\n3. غطِّ الجرح بضماد نظيف وجاف\n4. راقب علامات الخطر: نزيف لا يتوقف، تورم شديد، ألم متزايد، دوخة، أو صعوبة تنفس\n5. خذ جرعة كزاز إذا مر وقت طويل على آخر تطعيم"
+          : "If the situation is stable and the wound is minor, do this:\n1. Wash your hands, then apply pressure if there is mild bleeding\n2. Clean the wound with clean running water or saline\n3. Cover it with a clean dry dressing\n4. Watch danger signs: bleeding that does not stop, severe swelling, worsening pain, dizziness, or breathing trouble\n5. Check tetanus booster status if the last vaccine was long ago",
+      followUpQuestions: [
+        language === "ar"
+          ? "هل الجرح عميق أو النزيف مستمر أكثر من 10 دقائق؟"
+          : "Is the wound deep or is bleeding continuing for more than 10 minutes?",
+        language === "ar"
+          ? "هل المصاب تعرض لضربة قوية على الرأس أو الرقبة؟"
+          : "Was there a strong hit to the head or neck?"
+      ],
+      isEmergency: false,
+      intent: "medical_question",
+      keywords: ["accident", "wound", "first_aid"]
     };
   }
 
@@ -898,49 +993,84 @@ export class AIAssistantService {
       return fallback;
     }
 
-    const systemPrompt = `You are a real first-aid and medical assistant with strong GPT-4-level reasoning quality.
+    const systemPrompt = `You are a medical assistant inside an ambulance system app.
 
-Think carefully before answering, but return only the final answer.
+Your role is to help users with NON-emergency medical questions and basic first aid guidance.
 
-Behavior rules:
-- Detect whether the user is speaking Arabic or English and reply in the same language.
-- Never repeat a welcome message after the first interaction.
-- If the user asks a question, answer it directly first.
-- Ask at most 1-2 smart follow-up questions only when necessary.
-- If the input is unclear, ask a specific clarification question instead of giving a generic reply.
-- Keep the response calm, clear, structured, and step-by-step when useful.
-- Avoid generic template phrasing. Be specific to the exact scenario and details already mentioned in the conversation.
+STRICT RULES:
+1. Always determine if the situation is emergency or non-emergency.
+2. If the situation is potentially life-threatening (e.g., seizure, unconsciousness, severe bleeding, chest pain, difficulty breathing):
+   - STOP normal response
+   - Clearly tell the user this is an emergency
+   - Instruct them to request an ambulance immediately
+   - Provide only short, critical first-aid steps
 
-Emergency rules:
-- If the person is breathing, do NOT recommend CPR.
-- If the person is unconscious but breathing, tell the user to place them in the recovery position, monitor breathing, and call emergency services.
-- If the person is not breathing normally and unresponsive, tell the user to call emergency services and start CPR.
-- For severe bleeding, chest pain, breathing difficulty, or unconsciousness, clearly warn about emergency services while still giving safe first-aid steps.`;
+3. If the situation is NOT an emergency:
+   - Provide simple, clear, and practical advice
+   - Use short bullet points when possible
+   - Avoid complex medical terms
+   - Do NOT diagnose diseases
+   - Do NOT give medications or dosages
+
+4. Always be calm, clear, and helpful.
+
+5. If the user is unsure:
+   - Ask 1–2 short clarifying questions before answering
+
+6. Never give random or generic advice.
+   - Never use vague filler advice not linked to the user's symptoms.
+
+7. Keep responses concise and structured.
+   - For non-emergency cases, briefly summarize what you understood from the user first, then give practical steps.
+
+8. Always end with:
+"If symptoms get worse, consider seeking medical help."
+
+LANGUAGE:
+- Respond in the same language as the user (Arabic or English)
+- If Arabic, use simple, clear Arabic.
+
+IMPORTANT:
+You are NOT a doctor. You are a guidance assistant for safety and clarity.`;
 
     try {
-      const modelResponse = await client.chat.completions.create({
-        model: env.openaiModel || "gpt-4.1",
-        temperature: 0.2,
-        max_tokens: 700,
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt
-          },
-          ...sanitized
-        ]
-      });
+      const fullConversationText = sanitized.map((message) => message.content).join(" ");
+      const models = buildModelCandidates(env.openaiModel || "gpt-4.1");
+      let responseText = "";
 
-      const responseText = modelResponse.choices[0]?.message?.content?.trim();
+      for (const model of models) {
+        try {
+          const modelResponse = await withOpenAITimeout(
+            client.chat.completions.create({
+              model,
+              temperature: 0.2,
+              max_tokens: 900,
+              messages: [
+                {
+                  role: "system",
+                  content: systemPrompt
+                },
+                ...sanitized
+              ]
+            }),
+            OPENAI_CHAT_TIMEOUT_MS
+          );
+
+          const candidate = modelResponse.choices[0]?.message?.content?.trim();
+          if (!candidate || isGenericResponse(candidate, sanitized.length)) {
+            continue;
+          }
+          responseText = candidate;
+          break;
+        } catch {
+          continue;
+        }
+      }
+
       if (!responseText) {
         return fallback;
       }
 
-      if (isGenericResponse(responseText, sanitized.length)) {
-        return fallback;
-      }
-
-      const fullConversationText = sanitized.map((message) => message.content).join(" ");
       const detectedLanguage = detectLanguageFromText(lastUser || fullConversationText || responseText);
       const responseLanguage: ResponseLanguage =
         /[\u0600-\u06FF]/.test(responseText) ? "ar" : detectedLanguage === "ar" ? "ar" : "en";
@@ -954,6 +1084,7 @@ Emergency rules:
             ? "\n\nهذه حالة طارئة محتملة. اتصل بالإسعاف فوراً الآن."
             : "\n\nThis may be an emergency. Call emergency services immediately.";
       }
+      response = appendRequiredClosingLine(response);
 
       return {
         response,
@@ -1024,25 +1155,45 @@ Emergency rules:
     }
 
     try {
-      const systemPrompt = `You are an expert AI first-aid and medical assistant with GPT-4-level reasoning quality.
+      const systemPrompt = `You are a medical assistant inside an ambulance system app.
 
-Think carefully before answering, but return only the final JSON object.
+Your role is to help users with NON-emergency medical questions and basic first aid guidance.
 
-Core behavior:
-- Detect whether the user is speaking Arabic or English and reply in the same language.
-- Never repeat a welcome message after the first interaction.
-- If the user asks a question, answer it directly first.
-- Ask at most 1-2 relevant follow-up questions only when necessary.
-- If the input is unclear, ask a specific clarification question instead of giving generic text.
-- Keep responses calm, practical, structured, and step-by-step when useful.
-- Avoid generic template wording. Make the answer specific to the exact user question and the conversation context.
-- Never provide a definitive diagnosis.
+STRICT RULES:
+1. Always determine if the situation is emergency or non-emergency.
+2. If the situation is potentially life-threatening (e.g., seizure, unconsciousness, severe bleeding, chest pain, difficulty breathing):
+   - STOP normal response
+   - Clearly tell the user this is an emergency
+   - Instruct them to request an ambulance immediately
+   - Provide only short, critical first-aid steps
 
-Safety rules:
-- If the person is breathing, do NOT recommend CPR.
-- If the person is unconscious but breathing, recommend the recovery position, breathing monitoring, and calling emergency services.
-- If the person is not breathing normally and is unresponsive, advise calling emergency services and starting CPR.
-- For severe bleeding, breathing difficulty, chest pain, or unconsciousness, clearly warn about emergency services while still giving safe first-aid steps.
+3. If the situation is NOT an emergency:
+   - Provide simple, clear, and practical advice
+   - Use short bullet points when possible
+   - Avoid complex medical terms
+   - Do NOT diagnose diseases
+   - Do NOT give medications or dosages
+
+4. Always be calm, clear, and helpful.
+
+5. If the user is unsure:
+   - Ask 1–2 short clarifying questions before answering
+
+6. Never give random or generic advice.
+   - Never use vague filler advice not linked to the user's symptoms.
+
+7. Keep responses concise and structured.
+   - For non-emergency cases, briefly summarize what you understood from the user first, then give practical steps.
+
+8. Always end assistantResponse with:
+"If symptoms get worse, consider seeking medical help."
+
+LANGUAGE:
+- Respond in the same language as the user (Arabic or English)
+- If Arabic, use simple, clear Arabic.
+
+IMPORTANT:
+You are NOT a doctor. You are a guidance assistant for safety and clarity.
 
 Return ONLY valid JSON in this exact structure:
 {
@@ -1071,25 +1222,43 @@ Return ONLY valid JSON in this exact structure:
         content: msg.content
       }));
 
-      const modelResponse = await client.chat.completions.create({
-        model: env.openaiModel || "gpt-4.1",
-        temperature: 0.2,
-        max_tokens: 700,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt
-          },
-          ...conversationMessages,
-          {
-            role: "user",
-            content: userMessage
-          }
-        ]
-      });
+      const modelCandidates = buildModelCandidates(context.modelOverride || env.openaiModel || "gpt-4.1");
+      let content = "";
 
-      const content = modelResponse.choices[0]?.message?.content?.trim();
+      for (const model of modelCandidates) {
+        try {
+          const modelResponse = await withOpenAITimeout(
+            client.chat.completions.create({
+              model,
+              temperature: 0.2,
+              max_tokens: 900,
+              response_format: { type: "json_object" },
+              messages: [
+                {
+                  role: "system",
+                  content: systemPrompt
+                },
+                ...conversationMessages,
+                {
+                  role: "user",
+                  content: userMessage
+                }
+              ]
+            }),
+            OPENAI_CHAT_TIMEOUT_MS
+          );
+
+          const candidate = modelResponse.choices[0]?.message?.content?.trim();
+          if (!candidate) {
+            continue;
+          }
+          content = candidate;
+          break;
+        } catch {
+          continue;
+        }
+      }
+
       if (!content) {
         return buildContextualFallbackFromMessages([
           ...history,
@@ -1175,6 +1344,7 @@ Return ONLY valid JSON in this exact structure:
             ? "\n\nهذه حالة طارئة محتملة. اتصل بالإسعاف فوراً الآن."
             : "\n\nThis may be an emergency. Call emergency services immediately.";
       }
+      response = appendRequiredClosingLine(response);
 
       return {
         response,
