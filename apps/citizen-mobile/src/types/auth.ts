@@ -11,7 +11,7 @@ export type AuthStage =
 export type VerificationStatus = "pending" | "approved" | "rejected";
 
 export type LoginInput = {
-  email: string;
+  identifier: string;
   password: string;
   mockVerificationStatus?: VerificationStatus;
 };
@@ -29,6 +29,7 @@ export type UserSignupInput = {
   fullName: string;
   phone: string;
   email: string;
+  password: string;
   nationalId?: string;
   cityAddress: string;
   emergencyContact: string;
@@ -39,6 +40,7 @@ export type VolunteerSignupInput = {
   fullName: string;
   phone: string;
   email: string;
+  password: string;
   nationalId: string;
   specialty: string;
   licenseFileRef: string;

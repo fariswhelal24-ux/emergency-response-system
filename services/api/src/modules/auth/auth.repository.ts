@@ -29,8 +29,29 @@ export const authRepository = {
     return query.rows[0] ?? null;
   },
 
+  findUserByPhone: async (phone: string): Promise<UserRecord | null> => {
+    const query = await db.query<UserRecord>("SELECT * FROM users WHERE phone = $1 LIMIT 1", [phone]);
+    return query.rows[0] ?? null;
+  },
+
   findUserById: async (userId: string): Promise<UserRecord | null> => {
     const query = await db.query<UserRecord>("SELECT * FROM users WHERE id = $1 LIMIT 1", [userId]);
+    return query.rows[0] ?? null;
+  },
+
+  findCitizenByPhone: async (phone: string): Promise<UserRecord | null> => {
+    const query = await db.query<UserRecord>(
+      `
+      SELECT *
+      FROM users
+      WHERE role = 'CITIZEN'
+        AND phone = $1
+      ORDER BY created_at ASC
+      LIMIT 1
+      `,
+      [phone]
+    );
+
     return query.rows[0] ?? null;
   },
 
@@ -69,9 +90,12 @@ export const authRepository = {
     if (input.role === "VOLUNTEER") {
       await db.query(
         `
-        INSERT INTO volunteers (user_id)
-        VALUES ($1)
-        ON CONFLICT (user_id) DO NOTHING
+        INSERT INTO volunteers (user_id, availability)
+        VALUES ($1, 'AVAILABLE')
+        ON CONFLICT (user_id)
+        DO UPDATE SET
+          availability = 'AVAILABLE',
+          updated_at = NOW()
         `,
         [input.userId]
       );

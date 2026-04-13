@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Citizen Emergency",
-    "slug": "citizen-emergency",
+    "name": "emergensy respons",
+    "slug": "emergensy-respons",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -13,6 +13,23 @@
         "projectId": "f9395d83-b2d7-44f2-97bf-653b6c7a9970"
       }
     },
-    "owner": "farishelal"
+    "owner": "farishelal",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/f9395d83-b2d7-44f2-97bf-653b6c7a9970"
+    },
+    "android": {
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "ios": {
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "RapidAid uses your live location to dispatch nearby volunteers and ambulances during emergencies."
+      }
+    }
   }
 }

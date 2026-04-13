@@ -2,9 +2,17 @@ import { CaseDetail } from "../types";
 
 export const LiveTrackingPage = ({
   detail,
+  liveSync,
   onCloseCase
 }: {
   detail?: CaseDetail;
+  liveSync?: {
+    statusText?: string;
+    volunteerLocation?: { latitude: number; longitude: number; recordedAt?: string };
+    ambulanceLocation?: { latitude: number; longitude: number; etaMinutes?: number; recordedAt?: string };
+    citizenLocation?: { latitude: number; longitude: number; recordedAt?: string };
+    ambulanceRoute?: Array<{ latitude: number; longitude: number }>;
+  };
   onCloseCase?: () => void;
 }) => {
   if (!detail) {
@@ -21,6 +29,30 @@ export const LiveTrackingPage = ({
           <div className="map-pill map-pill--incident">Patient</div>
           <div className="map-pill map-pill--ambulance">Ambulance</div>
           <div className="map-pill map-pill--volunteer">Volunteer</div>
+        </div>
+        <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+          <p style={{ margin: 0, color: "#4A627F", fontSize: 13 }}>
+            Status: <strong style={{ color: "#173A63" }}>{liveSync?.statusText ?? detail.case.status}</strong>
+          </p>
+          <p style={{ margin: 0, color: "#4A627F", fontSize: 13 }}>
+            Citizen: {liveSync?.citizenLocation?.latitude?.toFixed(5) ?? detail.case.location.latitude.toFixed(5)},{" "}
+            {liveSync?.citizenLocation?.longitude?.toFixed(5) ?? detail.case.location.longitude.toFixed(5)}
+          </p>
+          <p style={{ margin: 0, color: "#4A627F", fontSize: 13 }}>
+            Volunteer:{" "}
+            {liveSync?.volunteerLocation
+              ? `${liveSync.volunteerLocation.latitude.toFixed(5)}, ${liveSync.volunteerLocation.longitude.toFixed(5)}`
+              : "Waiting for volunteer GPS feed"}
+          </p>
+          <p style={{ margin: 0, color: "#4A627F", fontSize: 13 }}>
+            Ambulance:{" "}
+            {liveSync?.ambulanceLocation
+              ? `${liveSync.ambulanceLocation.latitude.toFixed(5)}, ${liveSync.ambulanceLocation.longitude.toFixed(5)}`
+              : "Virtual ambulance dispatching..."}
+          </p>
+          <p style={{ margin: 0, color: "#1E5A92", fontSize: 12 }}>
+            Route points: {liveSync?.ambulanceRoute?.length ?? 0}
+          </p>
         </div>
       </article>
 

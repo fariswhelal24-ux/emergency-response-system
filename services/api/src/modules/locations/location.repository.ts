@@ -1,4 +1,5 @@
 import { db } from "../../database/pool";
+import { realVolunteerUserConditions } from "../../shared/sql/realVolunteerUser";
 import { LocationActor } from "../../shared/types/domain";
 
 export type LiveLocationRow = {
@@ -152,7 +153,8 @@ export const locationRepository = {
           v.current_longitude
         FROM volunteers v
         INNER JOIN users u ON u.id = v.user_id
-        WHERE v.availability = 'AVAILABLE'
+      WHERE v.availability = 'AVAILABLE'
+        AND ${realVolunteerUserConditions}
       ) s
       WHERE s.distance_km <= $3
       ORDER BY s.distance_km ASC

@@ -8,8 +8,11 @@ import { locationRepository } from "../modules/locations/location.repository";
 import { LocationActor, locationActors } from "../shared/types/domain";
 import { verifyAccessToken } from "../shared/utils/token";
 import { socketEvents } from "./events";
+import { registerVolunteerSocket, unregisterVolunteerSocket } from "./volunteerPresence";
 
 let io: Server | null = null;
+
+type EventName = string | readonly string[];
 
 const locationUpdatePayloadSchema = z.object({
   caseId: z.string().uuid().optional(),
@@ -21,6 +24,25 @@ const locationUpdatePayloadSchema = z.object({
   actorType: z.enum(locationActors).optional(),
   ambulanceId: z.string().uuid().optional()
 });
+
+const callStatePayloadSchema = z.object({
+  emergencyId: z.string().uuid(),
+  at: z.string().trim().min(4).max(64).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional()
+});
+
+const normalizeEvents = (events: EventName): string[] =>
+  (Array.isArray(events) ? [...events] : [events]).filter(Boolean);
+
+const emitToRooms = (rooms: string[], events: EventName, payload: unknown): void => {
+  const allEvents = normalizeEvents(events);
+
+  for (const room of rooms) {
+    for (const eventName of allEvents) {
+      io?.to(room).emit(eventName, payload);
+    }
+  }
+};
 
 const toActorType = (role: string): LocationActor => {
   if (role === "VOLUNTEER") {
@@ -34,18 +56,43 @@ const toActorType = (role: string): LocationActor => {
   return role === "CITIZEN" ? "CITIZEN" : "DISPATCHER";
 };
 
-const emitToDispatchRoles = (event: string, payload: unknown): void => {
-  io?.to("role:DISPATCHER").emit(event, payload);
-  io?.to("role:ADMIN").emit(event, payload);
+const emitToDispatchRoles = (events: EventName, payload: unknown): void => {
+  emitToRooms(["role:DISPATCHER", "role:ADMIN"], events, payload);
 };
 
-const emitToCase = (caseId: string, event: string, payload: unknown): void => {
-  io?.to(`case:${caseId}`).emit(event, payload);
+const emitToCase = (caseId: string, events: EventName, payload: unknown): void => {
+  emitToRooms([`case:${caseId}`], events, payload);
 };
 
-const emitToCaseAndDispatch = (caseId: string, event: string, payload: unknown): void => {
-  emitToCase(caseId, event, payload);
-  emitToDispatchRoles(event, payload);
+const emitToCaseAndDispatch = (caseId: string, events: EventName, payload: unknown): void => {
+  emitToCase(caseId, events, payload);
+  emitToDispatchRoles(events, payload);
+};
+
+const emergencyCreatedEvents = [socketEvents.emergencyCreated, socketEvents.emergencyCreatedV2] as const;
+const volunteerRequestedEvents = [socketEvents.volunteerAssigned, socketEvents.volunteerRequestedV2] as const;
+const volunteerAcceptedEvents = [socketEvents.volunteerResponded, socketEvents.volunteerAcceptedV2] as const;
+const locationChangedEvents = [socketEvents.locationChanged, socketEvents.locationUpdateV2] as const;
+const statusChangedEvents = [socketEvents.statusChanged, socketEvents.statusChangedV2] as const;
+
+const emitCallLifecycle = (
+  eventName: typeof socketEvents.callStarted | typeof socketEvents.callConnected | typeof socketEvents.callEnded,
+  emergencyId: string,
+  payload: Record<string, unknown>
+) => {
+  const eventPayload: Record<string, unknown> = {
+    emergencyId,
+    caseId: emergencyId,
+    at: new Date().toISOString(),
+    ...payload
+  };
+
+  emitToCaseAndDispatch(emergencyId, eventName, eventPayload);
+
+  const userId = typeof eventPayload["userId"] === "string" ? (eventPayload["userId"] as string) : null;
+  if (userId) {
+    emitToRooms([`user:${userId}`], eventName, eventPayload);
+  }
 };
 
 export const attachRealtimeServer = (server: HttpServer): void => {
@@ -78,6 +125,13 @@ export const attachRealtimeServer = (server: HttpServer): void => {
       socket.join(`user:${auth.userId}`);
       socket.join(`role:${auth.role}`);
 
+      if (auth.role === "VOLUNTEER") {
+        registerVolunteerSocket(auth.userId);
+        socket.once("disconnect", () => {
+          unregisterVolunteerSocket(auth.userId);
+        });
+      }
+
       if (auth.role === "DISPATCHER" || auth.role === "ADMIN") {
         socket.join("dispatch:center");
       }
@@ -102,7 +156,40 @@ export const attachRealtimeServer = (server: HttpServer): void => {
         socket.leave(`case:${caseId}`);
       });
 
-      socket.on(socketEvents.locationUpdate, async (input: unknown) => {
+      const handleCallStateEvent = (
+        eventName: typeof socketEvents.callStarted | typeof socketEvents.callConnected | typeof socketEvents.callEnded,
+        input: unknown
+      ) => {
+        try {
+          const payload = callStatePayloadSchema.parse(input);
+          socket.join(`case:${payload.emergencyId}`);
+
+          emitCallLifecycle(eventName, payload.emergencyId, {
+            userId: auth.userId,
+            role: auth.role,
+            at: payload.at,
+            metadata: payload.metadata ?? {}
+          });
+        } catch {
+          socket.emit(socketEvents.serverError, {
+            message: "Invalid call lifecycle payload"
+          });
+        }
+      };
+
+      socket.on(socketEvents.callStarted, (input: unknown) => {
+        handleCallStateEvent(socketEvents.callStarted, input);
+      });
+
+      socket.on(socketEvents.callConnected, (input: unknown) => {
+        handleCallStateEvent(socketEvents.callConnected, input);
+      });
+
+      socket.on(socketEvents.callEnded, (input: unknown) => {
+        handleCallStateEvent(socketEvents.callEnded, input);
+      });
+
+      const handleLocationUpdate = async (input: unknown): Promise<void> => {
         try {
           const payload = locationUpdatePayloadSchema.parse(input);
           const actorType = payload.actorType ?? toActorType(auth.role);
@@ -146,7 +233,7 @@ export const attachRealtimeServer = (server: HttpServer): void => {
           };
 
           if (location.case_id) {
-            emitToCaseAndDispatch(location.case_id, socketEvents.locationChanged, {
+            emitToCaseAndDispatch(location.case_id, locationChangedEvents, {
               caseId: location.case_id,
               location: locationPayload
             });
@@ -156,6 +243,14 @@ export const attachRealtimeServer = (server: HttpServer): void => {
             message: "Invalid location update payload"
           });
         }
+      };
+
+      socket.on(socketEvents.locationUpdate, (input: unknown) => {
+        void handleLocationUpdate(input);
+      });
+
+      socket.on(socketEvents.locationUpdateV2, (input: unknown) => {
+        void handleLocationUpdate(input);
       });
     } catch {
       socket.emit(socketEvents.serverError, {
@@ -167,39 +262,79 @@ export const attachRealtimeServer = (server: HttpServer): void => {
 };
 
 export const emitEmergencyCreated = (payload: unknown): void => {
-  emitToDispatchRoles(socketEvents.emergencyCreated, payload);
-  io?.to("role:VOLUNTEER").emit(socketEvents.emergencyCreated, payload);
+  emitToDispatchRoles(emergencyCreatedEvents, payload);
+  emitToRooms(["role:VOLUNTEER"], emergencyCreatedEvents, payload);
+
+  const reportingUserId =
+    typeof payload === "object" && payload && "reportingUserId" in payload
+      ? (payload as { reportingUserId?: string }).reportingUserId
+      : null;
+
+  if (reportingUserId) {
+    emitToRooms([`user:${reportingUserId}`], emergencyCreatedEvents, payload);
+  }
 };
 
 export const emitEmergencyUpdate = (caseId: string, payload: unknown): void => {
   emitToCaseAndDispatch(caseId, socketEvents.emergencyUpdate, payload);
+  emitToRooms(["role:VOLUNTEER"], socketEvents.emergencyUpdate, payload);
 };
 
 export const emitStatusChanged = (caseId: string, payload: unknown): void => {
-  emitToCaseAndDispatch(caseId, socketEvents.statusChanged, payload);
+  emitToCaseAndDispatch(caseId, statusChangedEvents, payload);
 };
 
 export const emitAmbulanceAssigned = (caseId: string, payload: unknown): void => {
-  emitToCaseAndDispatch(caseId, socketEvents.ambulanceAssigned, payload);
+  emitToCaseAndDispatch(caseId, [socketEvents.ambulanceAssigned, socketEvents.ambulanceUpdateV2], payload);
+};
+
+export const emitAmbulanceUpdate = (caseId: string, payload: unknown): void => {
+  emitToCaseAndDispatch(caseId, socketEvents.ambulanceUpdateV2, payload);
 };
 
 export const emitVolunteerAssigned = (caseId: string, payload: unknown): void => {
-  emitToCaseAndDispatch(caseId, socketEvents.volunteerAssigned, payload);
-  io?.to("role:VOLUNTEER").emit(socketEvents.volunteerAssigned, payload);
+  emitToCaseAndDispatch(caseId, volunteerRequestedEvents, payload);
+  emitToRooms(["role:VOLUNTEER"], volunteerRequestedEvents, payload);
 };
 
 export const emitVolunteerResponse = (caseId: string, payload: unknown): void => {
   emitToCaseAndDispatch(caseId, socketEvents.volunteerResponded, payload);
+
+  const assignmentStatus =
+    typeof payload === "object" && payload && "assignment" in payload
+      ? (payload as { assignment?: { status?: string } }).assignment?.status
+      : null;
+
+  if (assignmentStatus === "ACCEPTED") {
+    emitToCaseAndDispatch(caseId, volunteerAcceptedEvents, payload);
+  }
+};
+
+export const emitVolunteerAvailabilityChanged = (payload: unknown): void => {
+  emitToDispatchRoles(socketEvents.volunteerAvailabilityChanged, payload);
+  emitToRooms(["role:VOLUNTEER"], socketEvents.volunteerAvailabilityChanged, payload);
 };
 
 export const emitCaseClosed = (caseId: string, payload: unknown): void => {
-  emitToCaseAndDispatch(caseId, socketEvents.caseClosed, payload);
+  emitToCaseAndDispatch(caseId, [socketEvents.caseClosed, socketEvents.statusChangedV2], payload);
 };
 
 export const emitLocationUpdated = (caseId: string, payload: unknown): void => {
-  emitToCaseAndDispatch(caseId, socketEvents.locationChanged, payload);
+  emitToCaseAndDispatch(caseId, locationChangedEvents, payload);
 };
 
 export const emitMessageCreated = (caseId: string, payload: unknown): void => {
   emitToCaseAndDispatch(caseId, socketEvents.messageCreated, payload);
+};
+
+export const emitCallStarted = (emergencyId: string, payload: Record<string, unknown> = {}): void => {
+  emitCallLifecycle(socketEvents.callStarted, emergencyId, payload);
+};
+
+export const emitCallConnected = (emergencyId: string, payload: Record<string, unknown> = {}): void => {
+  emitCallLifecycle(socketEvents.callConnected, emergencyId, payload);
+};
+
+export const emitCallEnded = (emergencyId: string, payload: Record<string, unknown> = {}): void => {
+  emitCallLifecycle(socketEvents.callEnded, emergencyId, payload);
 };

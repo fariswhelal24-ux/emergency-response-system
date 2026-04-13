@@ -1,14 +1,28 @@
 import { StyleSheet, Text, View } from "react-native";
 
-import { activeEmergency } from "../data/mockVolunteer";
 import { Card, GhostButton, PrimaryButton, ScreenShell, SectionTitle } from "../components/Ui";
 import { colors, radius, spacing } from "../theme/tokens";
 
-export const AcceptedScreen = ({ onStartProgress }: { onStartProgress: () => void }) => {
+export const AcceptedScreen = ({
+  emergency,
+  onStartProgress
+}: {
+  emergency: {
+    etaMinutes: number;
+    urgencyLabel: string;
+    emergencyType: string;
+    distanceKm: number;
+    ambulanceDispatched: boolean;
+    patientSummary: string;
+    safeAccess: string;
+  };
+  onStartProgress: () => void;
+}) => {
+  const equipmentChecklist = ["Gloves", "Gauze", "Pulse oximeter", "Portable airway kit"];
   return (
     <ScreenShell>
       <Card>
-        <SectionTitle title="Head To Patient" subtitle={`ETA ${activeEmergency.etaMinutes} min`} />
+        <SectionTitle title="Head To Patient" subtitle={`ETA ${emergency.etaMinutes} min`} />
 
         <Card style={styles.mapCard}>
           <Text style={styles.mapTitle}>Navigation Route Active</Text>
@@ -16,15 +30,15 @@ export const AcceptedScreen = ({ onStartProgress }: { onStartProgress: () => voi
         </Card>
 
         <Card style={styles.summaryCard}>
-          <Text style={styles.label}>{activeEmergency.urgencyLabel}</Text>
-          <Text style={styles.summaryTitle}>{activeEmergency.emergencyType}</Text>
-          <Text style={styles.summaryMeta}>Distance {activeEmergency.distanceKm} km</Text>
-          <Text style={styles.summaryMeta}>Ambulance en route: {activeEmergency.ambulanceDispatched ? "Yes" : "No"}</Text>
+          <Text style={styles.label}>{emergency.urgencyLabel}</Text>
+          <Text style={styles.summaryTitle}>{emergency.emergencyType}</Text>
+          <Text style={styles.summaryMeta}>Distance {emergency.distanceKm} km</Text>
+          <Text style={styles.summaryMeta}>Ambulance en route: {emergency.ambulanceDispatched ? "Yes" : "No"}</Text>
         </Card>
 
         <Card style={styles.aiCard}>
           <Text style={styles.aiTitle}>AI Case Summary</Text>
-          <Text style={styles.aiCopy}>{activeEmergency.patientSummary}</Text>
+          <Text style={styles.aiCopy}>{emergency.patientSummary}</Text>
         </Card>
 
         <View style={styles.actionRow}>
@@ -37,13 +51,13 @@ export const AcceptedScreen = ({ onStartProgress }: { onStartProgress: () => voi
 
         <Card style={styles.safeCard}>
           <Text style={styles.safeTitle}>Safe Access</Text>
-          <Text style={styles.safeCopy}>{activeEmergency.safeAccess}</Text>
+          <Text style={styles.safeCopy}>{emergency.safeAccess}</Text>
           <Text style={styles.safeLink}>Request access details</Text>
         </Card>
 
         <Card style={styles.safeCard}>
           <Text style={styles.safeTitle}>Equipment Checklist</Text>
-          {activeEmergency.equipmentChecklist.map((item) => (
+          {equipmentChecklist.map((item) => (
             <Text key={item} style={styles.checkItem}>
               • {item}
             </Text>
@@ -95,7 +109,7 @@ const styles = StyleSheet.create({
     marginTop: 4
   },
   aiCard: {
-    backgroundColor: "#F4FBF6",
+    backgroundColor: "#F3F8FF",
     marginBottom: spacing.md
   },
   aiTitle: {

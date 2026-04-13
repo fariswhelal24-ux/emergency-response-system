@@ -203,10 +203,10 @@ const simplifyNetworkError = (message: string): string => {
     return "Login failed. Check phone/email and password, or tap Create New Account.";
   }
   if (/tunnel unavailable|http 503|bad gateway|gateway timeout/i.test(text)) {
-    return "Public tunnel expired or unavailable. Restart mobile in --public mode, then scan the new QR.";
+    return "Cannot reach the dev API through the tunnel. Install cloudflared (brew install cloudflared), run pnpm run dev:public:unified, scan the new QR, and try again.";
   }
   if (/cannot reach api server|network request failed|failed to fetch|load failed/i.test(text)) {
-    return "Cannot connect to the emergency server. Start the API (or run in --public mode) and reopen the mobile app.";
+    return "Cannot reach the server. Start the API. For another network: run pnpm run dev:mobile:public (port 8081 free), scan the new QR, reopen the app. Same Wi‑Fi: pnpm run dev:mobile:phone.";
   }
   return text;
 };
@@ -314,6 +314,7 @@ export default function App() {
   const [flow, setFlow] = useState<HomeFlow>("ready");
   const [activeCaseId, setActiveCaseId] = useState("");
   const [banner, setBanner] = useState<string>("");
+  const [authSubmitting, setAuthSubmitting] = useState(false);
   const [activeCaseLocation, setActiveCaseLocation] = useState<CaseCoordinate>(DEFAULT_BETHLEHEM_LOCATION);
   const [trackingState, setTrackingState] = useState<CitizenLiveTracking>({
     statusText: "Searching...",
@@ -1416,188 +1417,224 @@ export default function App() {
   }, [authStage, authenticatedRole, volunteerFlow, volunteerEmergencyState.caseId]);
 
   const handleLogin = (input: LoginInput) => {
+    setAuthSubmitting(true);
     setBanner("Signing in...");
 
-    void (async () => {
-      try {
-        const identifier = input.identifier.trim();
-        const primaryIsVolunteer = accountType === "VOLUNTEER";
-        const primaryLogin = primaryIsVolunteer ? loginVolunteerAccount : loginCitizenAccount;
-        const fallbackLogin = primaryIsVolunteer ? loginCitizenAccount : loginVolunteerAccount;
+    const loginTask = async () => {
+      const identifier = input.identifier.trim();
+      const primaryIsVolunteer = accountType === "VOLUNTEER";
+      const primaryLogin = primaryIsVolunteer ? loginVolunteerAccount : loginCitizenAccount;
+      const fallbackLogin = primaryIsVolunteer ? loginCitizenAccount : loginVolunteerAccount;
 
-        let resolvedRole = "";
-        let finalError: Error | null = null;
+      let resolvedRole = "";
+      let finalError: Error | null = null;
+      try {
+        const primaryAuth = await primaryLogin({
+          identifier,
+          password: input.password
+        });
+        resolvedRole = String(primaryAuth?.user?.role || "").toUpperCase();
+      } catch (primaryError) {
         try {
-          const primaryAuth = await primaryLogin({
+          const fallbackAuth = await fallbackLogin({
             identifier,
             password: input.password
           });
-          resolvedRole = String(primaryAuth?.user?.role || "").toUpperCase();
-        } catch (primaryError) {
-          try {
-            const fallbackAuth = await fallbackLogin({
-              identifier,
-              password: input.password
-            });
-            resolvedRole = String(fallbackAuth?.user?.role || "").toUpperCase();
-          } catch (fallbackError) {
-            finalError = fallbackError instanceof Error ? fallbackError : new Error(String(fallbackError));
+          resolvedRole = String(fallbackAuth?.user?.role || "").toUpperCase();
+        } catch (fallbackError) {
+          finalError = fallbackError instanceof Error ? fallbackError : new Error(String(fallbackError));
 
-            if (!primaryIsVolunteer && /invalid login or password/i.test(finalError.message)) {
-              try {
-                setBanner("No account found. Creating a citizen account automatically...");
-                const signupPayload = buildCitizenSignupFromLogin(identifier, input.password);
-                await registerCitizenAccount(signupPayload);
-                const signupAuth = await loginCitizenAccount({
-                  identifier,
-                  password: input.password
-                });
-                resolvedRole = String(signupAuth?.user?.role || "").toUpperCase();
-              } catch {
-                throw finalError;
-              }
-            } else {
+          if (!primaryIsVolunteer && /invalid login or password/i.test(finalError.message)) {
+            try {
+              setBanner("No account found. Creating a citizen account automatically...");
+              const signupPayload = buildCitizenSignupFromLogin(identifier, input.password);
+              await registerCitizenAccount(signupPayload);
+              const signupAuth = await loginCitizenAccount({
+                identifier,
+                password: input.password
+              });
+              resolvedRole = String(signupAuth?.user?.role || "").toUpperCase();
+            } catch {
               throw finalError;
             }
+          } else {
+            throw finalError;
           }
         }
+      }
 
-        if (!resolvedRole) {
-          throw finalError ?? new Error("Login failed");
-        }
+      if (!resolvedRole) {
+        throw finalError ?? new Error("Login failed");
+      }
 
-        if (resolvedRole === "VOLUNTEER" || primaryIsVolunteer) {
-          try {
-            const volunteerProfile = await getVolunteerProfile();
-            setVolunteerProfileState({
-              name: volunteerProfile.name || defaultVolunteerProfile.name,
-              email: volunteerProfile.email || "",
-              phone: volunteerProfile.phone || "",
-              specialty: volunteerProfile.specialty || "",
-              verificationBadge: volunteerProfile.verificationBadge || "",
-              responseRadiusKm: String(volunteerProfile.responseRadiusKm || 5)
-            });
-          } catch {
-            setVolunteerProfileState(defaultVolunteerProfile);
-          }
-          setAccountType("VOLUNTEER");
-          setAuthenticatedRole("VOLUNTEER");
-        } else {
-          try {
-            const [userProfile, medicalProfile] = await Promise.all([
-              getCitizenUserProfile(),
-              getCitizenMedicalProfile()
-            ]);
-            setCitizenProfileState({
-              fullName: userProfile.fullName || defaultCitizenProfile.fullName,
-              phone: userProfile.phone || "",
-              email: userProfile.email || "",
-              bloodType: medicalProfile.bloodType || "",
-              conditions: medicalProfile.conditions || "",
-              allergies: medicalProfile.allergies || "",
-              emergencyContactName: medicalProfile.emergencyContactName || "",
-              emergencyContactPhone: medicalProfile.emergencyContactPhone || ""
-            });
-          } catch {
-            setCitizenProfileState((current) => ({
-              ...defaultCitizenProfile,
-              fullName: current.fullName || defaultCitizenProfile.fullName,
-              phone: current.phone || identifier,
-              email: current.email
-            }));
-          }
-          setAccountType("USER");
-          setAuthenticatedRole("USER");
-        }
-
+      // Route by actual server role — not by selected tile. (Old bug: Volunteer tile + citizen
+      // account used `primaryIsVolunteer` and always took the volunteer branch, so profile/API
+      // could misbehave and the UI felt "stuck" on sign-in.)
+      if (resolvedRole === "VOLUNTEER") {
+        setAccountType("VOLUNTEER");
+        setAuthenticatedRole("VOLUNTEER");
         setAuthStage("authenticated");
         setBanner("");
+        try {
+          const volunteerProfile = await getVolunteerProfile();
+          setVolunteerProfileState({
+            name: volunteerProfile.name || defaultVolunteerProfile.name,
+            email: volunteerProfile.email || "",
+            phone: volunteerProfile.phone || "",
+            specialty: volunteerProfile.specialty || "",
+            verificationBadge: volunteerProfile.verificationBadge || "",
+            responseRadiusKm: String(volunteerProfile.responseRadiusKm || 5)
+          });
+        } catch {
+          setVolunteerProfileState(defaultVolunteerProfile);
+        }
+      } else {
+        if (accountType === "VOLUNTEER") {
+          throw new Error(
+            "This account is a citizen account, not a volunteer. Tap Back, choose Citizen, then sign in — or use Sign up to create a volunteer account."
+          );
+        }
+
+        setAccountType("USER");
+        setAuthenticatedRole("USER");
+        setAuthStage("authenticated");
+        setBanner("");
+        try {
+          const [userProfile, medicalProfile] = await Promise.all([
+            getCitizenUserProfile(),
+            getCitizenMedicalProfile()
+          ]);
+          setCitizenProfileState({
+            fullName: userProfile.fullName || defaultCitizenProfile.fullName,
+            phone: userProfile.phone || "",
+            email: userProfile.email || "",
+            bloodType: medicalProfile.bloodType || "",
+            conditions: medicalProfile.conditions || "",
+            allergies: medicalProfile.allergies || "",
+            emergencyContactName: medicalProfile.emergencyContactName || "",
+            emergencyContactPhone: medicalProfile.emergencyContactPhone || ""
+          });
+        } catch {
+          setCitizenProfileState((current) => ({
+            ...defaultCitizenProfile,
+            fullName: current.fullName || defaultCitizenProfile.fullName,
+            phone: current.phone || identifier,
+            email: current.email
+          }));
+        }
+      }
+    };
+
+    void (async () => {
+      try {
+        await Promise.race([
+          loginTask(),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => {
+              reject(
+                new Error(
+                  "Sign-in timed out. Check network, run the API, and rescan the latest Expo QR (pnpm run dev:mobile:public if not on the same Wi‑Fi)."
+                )
+              );
+            }, 55_000);
+          })
+        ]);
       } catch (error) {
-        const message = simplifyNetworkError(
-          error instanceof Error ? error.message : "Login failed"
-        );
+        const message = simplifyNetworkError(error instanceof Error ? error.message : "Login failed");
         setBanner(message);
+      } finally {
+        setAuthSubmitting(false);
       }
     })();
   };
 
   const handleVolunteerSignup = (input: VolunteerSignupInput) => {
+    setAuthSubmitting(true);
     setBanner("Creating volunteer account...");
+
+    const signupTask = async () => {
+      await registerVolunteerAccount({
+        fullName: input.fullName,
+        email: input.email,
+        password: input.password,
+        phone: input.phone
+      });
+      const signupAuth = await loginVolunteerAccount({
+        identifier: input.phone.trim(),
+        password: input.password
+      });
+      const resolvedRole = String(signupAuth?.user?.role || "").toUpperCase();
+
+      if (resolvedRole === "VOLUNTEER") {
+        setAccountType("VOLUNTEER");
+        setAuthenticatedRole("VOLUNTEER");
+        setAuthStage("authenticated");
+        setBanner("");
+        try {
+          const volunteerProfile = await getVolunteerProfile();
+          setVolunteerProfileState({
+            name: volunteerProfile.name || input.fullName,
+            email: volunteerProfile.email || input.email,
+            phone: volunteerProfile.phone || input.phone,
+            specialty: volunteerProfile.specialty || input.specialty,
+            verificationBadge: volunteerProfile.verificationBadge || "Medical Volunteer",
+            responseRadiusKm: String(volunteerProfile.responseRadiusKm || 5)
+          });
+        } catch {
+          setVolunteerProfileState({
+            ...defaultVolunteerProfile,
+            name: input.fullName,
+            email: input.email,
+            phone: input.phone,
+            specialty: input.specialty
+          });
+        }
+      } else {
+        try {
+          const [userProfile, medicalProfile] = await Promise.all([
+            getCitizenUserProfile(),
+            getCitizenMedicalProfile()
+          ]);
+          setCitizenProfileState({
+            fullName: userProfile.fullName || input.fullName,
+            phone: userProfile.phone || input.phone,
+            email: userProfile.email || input.email,
+            bloodType: medicalProfile.bloodType || "",
+            conditions: medicalProfile.conditions || "",
+            allergies: medicalProfile.allergies || "",
+            emergencyContactName: medicalProfile.emergencyContactName || "",
+            emergencyContactPhone: medicalProfile.emergencyContactPhone || ""
+          });
+        } catch {
+          setCitizenProfileState((current) => ({
+            ...defaultCitizenProfile,
+            fullName: current.fullName || input.fullName,
+            phone: current.phone || input.phone,
+            email: current.email || input.email
+          }));
+        }
+        setAccountType("USER");
+        setAuthenticatedRole("USER");
+        setAuthStage("authenticated");
+        setBanner("This phone number is already linked to a citizen account. Logged in successfully.");
+      }
+    };
 
     void (async () => {
       try {
-        await registerVolunteerAccount({
-          fullName: input.fullName,
-          email: input.email,
-          password: input.password,
-          phone: input.phone
-        });
-        const signupAuth = await loginVolunteerAccount({
-          identifier: input.phone.trim(),
-          password: input.password
-        });
-        const resolvedRole = String(signupAuth?.user?.role || "").toUpperCase();
-
-        if (resolvedRole === "VOLUNTEER") {
-          try {
-            const volunteerProfile = await getVolunteerProfile();
-            setVolunteerProfileState({
-              name: volunteerProfile.name || input.fullName,
-              email: volunteerProfile.email || input.email,
-              phone: volunteerProfile.phone || input.phone,
-              specialty: volunteerProfile.specialty || input.specialty,
-              verificationBadge: volunteerProfile.verificationBadge || "Medical Volunteer",
-              responseRadiusKm: String(volunteerProfile.responseRadiusKm || 5)
-            });
-          } catch {
-            setVolunteerProfileState({
-              ...defaultVolunteerProfile,
-              name: input.fullName,
-              email: input.email,
-              phone: input.phone,
-              specialty: input.specialty
-            });
-          }
-          setAccountType("VOLUNTEER");
-          setAuthenticatedRole("VOLUNTEER");
-        } else {
-          try {
-            const [userProfile, medicalProfile] = await Promise.all([
-              getCitizenUserProfile(),
-              getCitizenMedicalProfile()
-            ]);
-            setCitizenProfileState({
-              fullName: userProfile.fullName || input.fullName,
-              phone: userProfile.phone || input.phone,
-              email: userProfile.email || input.email,
-              bloodType: medicalProfile.bloodType || "",
-              conditions: medicalProfile.conditions || "",
-              allergies: medicalProfile.allergies || "",
-              emergencyContactName: medicalProfile.emergencyContactName || "",
-              emergencyContactPhone: medicalProfile.emergencyContactPhone || ""
-            });
-          } catch {
-            setCitizenProfileState((current) => ({
-              ...defaultCitizenProfile,
-              fullName: current.fullName || input.fullName,
-              phone: current.phone || input.phone,
-              email: current.email || input.email
-            }));
-          }
-          setAccountType("USER");
-          setAuthenticatedRole("USER");
-          setBanner("This phone number is already linked to a citizen account. Logged in successfully.");
-        }
-
-        setAuthStage("authenticated");
-        if (resolvedRole === "VOLUNTEER") {
-          setBanner("");
-        }
+        await Promise.race([
+          signupTask(),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error("Sign-up timed out. Check tunnel/network and rescan QR.")), 90_000);
+          })
+        ]);
       } catch (error) {
         const message = simplifyNetworkError(
           error instanceof Error ? error.message : "Unable to register volunteer account."
         );
         setBanner(message);
+      } finally {
+        setAuthSubmitting(false);
       }
     })();
   };
@@ -1649,6 +1686,7 @@ export default function App() {
       return (
         <LoginScreen
           role={accountType}
+          submitting={authSubmitting}
           onSubmit={handleLogin}
           onSwitchToSignup={() => setAuthStage("signup")}
           onBack={() => setAuthStage("roleSelection")}
@@ -1660,68 +1698,81 @@ export default function App() {
       return (
         <SignupScreen
           role={accountType}
+          submitting={authSubmitting}
           onBack={() => setAuthStage("roleSelection")}
           onSwitchToLogin={() => setAuthStage("login")}
           onSubmitUser={(input) => {
+            setAuthSubmitting(true);
             setBanner("Creating account...");
+
+            const signupTask = async () => {
+              await registerCitizenAccount({
+                fullName: input.fullName,
+                email: input.email,
+                password: input.password,
+                phone: input.phone
+              });
+              const signupAuth = await loginCitizenAccount({
+                identifier: input.phone.trim(),
+                password: input.password
+              });
+              const resolvedRole = String(signupAuth?.user?.role || "").toUpperCase();
+
+              if (resolvedRole === "VOLUNTEER") {
+                try {
+                  const volunteerProfile = await getVolunteerProfile();
+                  setVolunteerProfileState({
+                    name: volunteerProfile.name || input.fullName,
+                    email: volunteerProfile.email || input.email,
+                    phone: volunteerProfile.phone || input.phone,
+                    specialty: volunteerProfile.specialty || "",
+                    verificationBadge: volunteerProfile.verificationBadge || "Medical Volunteer",
+                    responseRadiusKm: String(volunteerProfile.responseRadiusKm || 5)
+                  });
+                } catch {
+                  setVolunteerProfileState({
+                    ...defaultVolunteerProfile,
+                    name: input.fullName,
+                    email: input.email,
+                    phone: input.phone
+                  });
+                }
+                setAccountType("VOLUNTEER");
+                setAuthenticatedRole("VOLUNTEER");
+                setBanner("This phone number is linked to a volunteer account. Logged in successfully.");
+              } else {
+                setCitizenProfileState({
+                  fullName: input.fullName,
+                  phone: input.phone,
+                  email: input.email,
+                  bloodType: "",
+                  conditions: "",
+                  allergies: "",
+                  emergencyContactName: input.emergencyContact,
+                  emergencyContactPhone: ""
+                });
+                setAccountType("USER");
+                setAuthenticatedRole("USER");
+                setBanner("");
+              }
+              setAuthStage("authenticated");
+            };
 
             void (async () => {
               try {
-                await registerCitizenAccount({
-                  fullName: input.fullName,
-                  email: input.email,
-                  password: input.password,
-                  phone: input.phone
-                });
-                const signupAuth = await loginCitizenAccount({
-                  identifier: input.phone.trim(),
-                  password: input.password
-                });
-                const resolvedRole = String(signupAuth?.user?.role || "").toUpperCase();
-
-                if (resolvedRole === "VOLUNTEER") {
-                  try {
-                    const volunteerProfile = await getVolunteerProfile();
-                    setVolunteerProfileState({
-                      name: volunteerProfile.name || input.fullName,
-                      email: volunteerProfile.email || input.email,
-                      phone: volunteerProfile.phone || input.phone,
-                      specialty: volunteerProfile.specialty || "",
-                      verificationBadge: volunteerProfile.verificationBadge || "Medical Volunteer",
-                      responseRadiusKm: String(volunteerProfile.responseRadiusKm || 5)
-                    });
-                  } catch {
-                    setVolunteerProfileState({
-                      ...defaultVolunteerProfile,
-                      name: input.fullName,
-                      email: input.email,
-                      phone: input.phone
-                    });
-                  }
-                  setAccountType("VOLUNTEER");
-                  setAuthenticatedRole("VOLUNTEER");
-                  setBanner("This phone number is linked to a volunteer account. Logged in successfully.");
-                } else {
-                  setCitizenProfileState({
-                    fullName: input.fullName,
-                    phone: input.phone,
-                    email: input.email,
-                    bloodType: "",
-                    conditions: "",
-                    allergies: "",
-                    emergencyContactName: input.emergencyContact,
-                    emergencyContactPhone: ""
-                  });
-                  setAccountType("USER");
-                  setAuthenticatedRole("USER");
-                  setBanner("");
-                }
-                setAuthStage("authenticated");
+                await Promise.race([
+                  signupTask(),
+                  new Promise<never>((_, reject) => {
+                    setTimeout(() => reject(new Error("Sign-up timed out. Check tunnel/network and rescan QR.")), 90_000);
+                  })
+                ]);
               } catch (error) {
                 const message = simplifyNetworkError(
                   error instanceof Error ? error.message : "Unable to create account."
                 );
                 setBanner(message);
+              } finally {
+                setAuthSubmitting(false);
               }
             })();
           }}
@@ -1731,7 +1782,7 @@ export default function App() {
     }
 
     return null;
-  }, [accountType, authStage]);
+  }, [accountType, authStage, authSubmitting]);
 
   const citizenContent = useMemo(() => {
     if (tab === "history") {

@@ -38,7 +38,7 @@ export const RoleSelectionScreen = ({
       <View style={styles.headerBlock}>
         <Text style={styles.kicker}>National Emergency Access</Text>
         <Text style={styles.title}>Choose Account Type</Text>
-        <Text style={styles.subtitle}>Select the workflow that matches your role in the service.</Text>
+        <Text style={styles.subtitle}>One app, one QR. Choose Citizen or Volunteer role.</Text>
       </View>
 
       <View style={styles.listWrap}>

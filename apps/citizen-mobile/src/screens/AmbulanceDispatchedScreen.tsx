@@ -2,7 +2,6 @@ import { ReactNode, useMemo, useState } from "react";
 import {
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,20 +9,20 @@ import {
   View
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { liveCase } from "../data/mockCitizen";
 import { colors, radius, spacing } from "../theme/tokens";
 
 const dispatchedData = {
-  etaMinutes: liveCase.etaMinutes,
-  unitLabel: "Nearby EMT Unit No. 5",
-  responderName: "Alex D.",
+  etaMinutes: 3,
+  unitLabel: "Nearest available ambulance unit",
+  responderName: "Nearest responder",
   responderRole: "Certified EMT",
-  responderUnit: "Unit No. 5",
-  vehicleCode: "52-AV-X319",
-  volunteerName: "Dr. Sarah J.",
-  volunteerSpecialty: "Cardiologist",
-  volunteerMessage: "is the nearest available volunteer.",
+  responderUnit: "Emergency Unit",
+  vehicleCode: "Assigned by dispatch",
+  volunteerName: "Nearest volunteer",
+  volunteerSpecialty: "Medical Volunteer",
+  volunteerMessage: "has been notified.",
   helperText: "Call will stay connected for updates and guidance.",
   updateChips: ["Condition changed", "More bleeding", "Patient moved", "Breathing changed"],
   aiGuidance: [
@@ -56,7 +55,7 @@ const mapStreets = [
   { top: 32, left: 254, height: 176 }
 ];
 
-const routeDots = Array.from({ length: 11 }, (_, index) => ({
+const defaultRouteDots = Array.from({ length: 11 }, (_, index) => ({
   left: 240 - index * 18,
   top: 56 + index * 14
 }));
@@ -78,6 +77,37 @@ const cardShadow = {
   shadowRadius: 22,
   elevation: 8
 } as const;
+
+type LiveCoordinate = {
+  latitude: number;
+  longitude: number;
+};
+
+type CitizenLiveTrackingState = {
+  statusText: string;
+  volunteerLocation?: LiveCoordinate;
+  ambulanceLocation?: LiveCoordinate & { etaMinutes?: number };
+  citizenLocation?: LiveCoordinate;
+  ambulanceRoute?: LiveCoordinate[];
+  syncState: "connecting" | "connected" | "offline";
+};
+
+const mapDotFromCoordinate = (coordinate: LiveCoordinate): { left: number; top: number } => {
+  const minLat = 31.87;
+  const maxLat = 31.95;
+  const minLng = 35.15;
+  const maxLng = 35.25;
+  const width = 294;
+  const height = 278;
+
+  const xRatio = (coordinate.longitude - minLng) / (maxLng - minLng);
+  const yRatio = 1 - (coordinate.latitude - minLat) / (maxLat - minLat);
+
+  return {
+    left: Math.max(16, Math.min(width - 16, Math.round(xRatio * width))),
+    top: Math.max(16, Math.min(height - 16, Math.round(yRatio * height)))
+  };
+};
 
 const AvatarBubble = ({
   initials,
@@ -112,15 +142,28 @@ const CardSurface = ({
 }) => <View style={[styles.cardSurface, cardShadow, style]}>{children}</View>;
 
 export const AmbulanceDispatchedScreen = ({
+  caseSnapshot,
+  liveTracking,
   onOpenFirstAid,
   onSendUpdate,
   onContactVolunteer,
-  onOpenSettings
+  onOpenSettings,
+  onEndCase
 }: {
+  caseSnapshot: {
+    caseNumber: string;
+    emergencyType: string;
+    address: string;
+    aiSummary: string;
+    ambulanceEtaMinutes: number | null;
+    volunteerEtaMinutes: number | null;
+  };
+  liveTracking: CitizenLiveTrackingState;
   onOpenFirstAid: () => void;
   onSendUpdate: (message: string) => void;
   onContactVolunteer: () => void;
   onOpenSettings: () => void;
+  onEndCase: () => void;
 }) => {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedChip, setSelectedChip] = useState<string | null>(null);
@@ -133,6 +176,49 @@ export const AmbulanceDispatchedScreen = ({
 
     return selectedChip ?? updateText.trim();
   }, [selectedChip, updateText]);
+
+  const projectedCitizen = useMemo(() => {
+    return liveTracking.citizenLocation ? mapDotFromCoordinate(liveTracking.citizenLocation) : { left: 108, top: 176 };
+  }, [liveTracking.citizenLocation]);
+
+  const projectedAmbulance = useMemo(() => {
+    return liveTracking.ambulanceLocation ? mapDotFromCoordinate(liveTracking.ambulanceLocation) : { left: 228, top: 68 };
+  }, [liveTracking.ambulanceLocation]);
+
+  const projectedVolunteer = useMemo(() => {
+    return liveTracking.volunteerLocation ? mapDotFromCoordinate(liveTracking.volunteerLocation) : { left: 246, top: 40 };
+  }, [liveTracking.volunteerLocation]);
+
+  const routeDots = useMemo(() => {
+    if (liveTracking.ambulanceRoute && liveTracking.ambulanceRoute.length > 1) {
+      return liveTracking.ambulanceRoute.slice(0, 18).map((point) => mapDotFromCoordinate(point));
+    }
+
+    return defaultRouteDots;
+  }, [liveTracking.ambulanceRoute]);
+
+  const volunteerRouteDots = useMemo(() => {
+    if (!liveTracking.volunteerLocation || !liveTracking.citizenLocation) {
+      return [];
+    }
+
+    const points: Array<{ left: number; top: number }> = [];
+    const steps = 10;
+    for (let index = 0; index <= steps; index += 1) {
+      const ratio = index / steps;
+      const point = {
+        latitude:
+          liveTracking.volunteerLocation.latitude +
+          (liveTracking.citizenLocation.latitude - liveTracking.volunteerLocation.latitude) * ratio,
+        longitude:
+          liveTracking.volunteerLocation.longitude +
+          (liveTracking.citizenLocation.longitude - liveTracking.volunteerLocation.longitude) * ratio
+      };
+      points.push(mapDotFromCoordinate(point));
+    }
+
+    return points;
+  }, [liveTracking.citizenLocation, liveTracking.volunteerLocation]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -162,7 +248,17 @@ export const AmbulanceDispatchedScreen = ({
 
         <View style={styles.statusWrap}>
           <Text style={styles.statusTitle}>Ambulance Dispatched</Text>
-          <Text style={styles.statusSubtitle}>Help is on the way</Text>
+          <Text style={styles.statusSubtitle}>{liveTracking.statusText || "Help is on the way"}</Text>
+          <Text style={styles.statusCaseMeta}>
+            {(caseSnapshot.caseNumber || "New Case") + " • " + caseSnapshot.emergencyType}
+          </Text>
+          <Text style={styles.statusSync}>
+            {liveTracking.syncState === "connected"
+              ? "Live sync connected"
+              : liveTracking.syncState === "connecting"
+                ? "Connecting live sync..."
+                : "Live sync offline"}
+          </Text>
         </View>
 
         <CardSurface style={styles.mapCard}>
@@ -220,7 +316,15 @@ export const AmbulanceDispatchedScreen = ({
               />
             ))}
 
-            <View style={styles.endpointMarker} />
+            <View
+              style={[
+                styles.endpointMarker,
+                {
+                  left: projectedVolunteer.left + 6,
+                  top: projectedVolunteer.top + 2
+                }
+              ]}
+            />
 
             {routeDots.map((dot, index) => (
               <View
@@ -235,13 +339,58 @@ export const AmbulanceDispatchedScreen = ({
               />
             ))}
 
-            <View style={styles.ambulanceBadge}>
+            {volunteerRouteDots.map((dot, index) => (
+              <View
+                key={`vol-dot-${index}`}
+                style={[
+                  styles.volunteerRouteDot,
+                  {
+                    left: dot.left,
+                    top: dot.top
+                  }
+                ]}
+              />
+            ))}
+
+            <View
+              style={[
+                styles.ambulanceBadge,
+                {
+                  left: projectedAmbulance.left,
+                  top: projectedAmbulance.top
+                }
+              ]}
+            >
               <MaterialCommunityIcons name="ambulance" size={22} color="#C92233" />
             </View>
 
-            <View style={styles.patientPulseOuter} />
-            <View style={styles.patientPulseInner} />
-            <View style={styles.patientPinWrap}>
+            <View
+              style={[
+                styles.patientPulseOuter,
+                {
+                  left: projectedCitizen.left - 48,
+                  top: projectedCitizen.top - 44
+                }
+              ]}
+            />
+            <View
+              style={[
+                styles.patientPulseInner,
+                {
+                  left: projectedCitizen.left - 28,
+                  top: projectedCitizen.top - 24
+                }
+              ]}
+            />
+            <View
+              style={[
+                styles.patientPinWrap,
+                {
+                  left: projectedCitizen.left - 20,
+                  top: projectedCitizen.top - 36
+                }
+              ]}
+            >
               <MaterialCommunityIcons name="map-marker" size={36} color="#DA2338" />
               <View style={styles.patientPinCenter} />
             </View>
@@ -250,7 +399,9 @@ export const AmbulanceDispatchedScreen = ({
 
         <CardSurface style={styles.etaCard}>
           <View style={styles.etaHeaderRow}>
-            <Text style={styles.etaText}>ETA: {dispatchedData.etaMinutes} min</Text>
+            <Text style={styles.etaText}>
+              ETA: {liveTracking.ambulanceLocation?.etaMinutes ?? caseSnapshot.ambulanceEtaMinutes ?? dispatchedData.etaMinutes} min
+            </Text>
             <Text style={styles.etaMeta}>({dispatchedData.unitLabel})</Text>
           </View>
 
@@ -284,6 +435,7 @@ export const AmbulanceDispatchedScreen = ({
               <Text style={styles.volunteerText}>
                 {dispatchedData.volunteerName} ({dispatchedData.volunteerSpecialty}) {dispatchedData.volunteerMessage}
               </Text>
+              <Text style={styles.responderSupport}>Location: {caseSnapshot.address}</Text>
 
               <Pressable style={styles.contactButton} onPress={onContactVolunteer}>
                 <MaterialCommunityIcons name="phone-outline" size={16} color="#FFFFFF" />
@@ -305,6 +457,8 @@ export const AmbulanceDispatchedScreen = ({
               <Text style={styles.guidanceSubtitle}>Stay calm. Follow these steps until help arrives.</Text>
             </View>
           </View>
+
+          <Text style={styles.guidanceSummary}>{caseSnapshot.aiSummary}</Text>
 
           <View style={styles.guidanceList}>
             {dispatchedData.aiGuidance.map((item) => (
@@ -340,6 +494,11 @@ export const AmbulanceDispatchedScreen = ({
         </Pressable>
 
         <Text style={styles.helperText}>{dispatchedData.helperText}</Text>
+
+        <Pressable style={styles.endCaseButton} onPress={onEndCase}>
+          <MaterialCommunityIcons name="check-circle-outline" size={18} color="#D12136" />
+          <Text style={styles.endCaseButtonText}>End Case</Text>
+        </Pressable>
       </ScrollView>
 
       <Modal transparent animationType="slide" visible={sheetOpen} onRequestClose={() => setSheetOpen(false)}>
@@ -538,6 +697,19 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: 6
   },
+  statusCaseMeta: {
+    color: "#48607A",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 4,
+    textAlign: "center"
+  },
+  statusSync: {
+    color: "#6C7E92",
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 4
+  },
   cardSurface: {
     backgroundColor: "#FFFFFF",
     borderRadius: 28,
@@ -613,6 +785,14 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 3.5,
     backgroundColor: "#E33343"
+  },
+  volunteerRouteDot: {
+    position: "absolute",
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#2D80FF",
+    opacity: 0.85
   },
   ambulanceBadge: {
     position: "absolute",
@@ -783,6 +963,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22
   },
+  responderSupport: {
+    color: "#667C95",
+    fontSize: 12,
+    marginTop: 4
+  },
   contactButton: {
     alignSelf: "flex-start",
     flexDirection: "row",
@@ -808,6 +993,12 @@ const styles = StyleSheet.create({
     color: "#7B8794",
     fontSize: 13,
     marginTop: 3
+  },
+  guidanceSummary: {
+    color: "#384E66",
+    fontSize: 13,
+    lineHeight: 20,
+    marginBottom: spacing.md
   },
   guidanceList: {
     gap: spacing.md
@@ -902,6 +1093,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: "center",
     marginTop: -4
+  },
+  endCaseButton: {
+    minHeight: 52,
+    borderRadius: radius.round,
+    borderWidth: 1,
+    borderColor: "#F2B9C1",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8
+  },
+  endCaseButtonText: {
+    color: "#D12136",
+    fontSize: 15,
+    fontWeight: "800"
   },
   sheetBackdrop: {
     flex: 1,

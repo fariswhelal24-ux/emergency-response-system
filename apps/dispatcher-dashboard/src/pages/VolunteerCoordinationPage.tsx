@@ -38,6 +38,7 @@ export const VolunteerCoordinationPage = ({
               <th>Name</th>
               <th>Specialty</th>
               <th>Availability</th>
+              <th>App</th>
               <th>Distance</th>
               <th>ETA</th>
               <th>Response</th>
@@ -50,6 +51,11 @@ export const VolunteerCoordinationPage = ({
                 <td>{item.name}</td>
                 <td>{item.specialty}</td>
                 <td>{item.availability}</td>
+                <td>
+                  <span className={`badge ${item.appConnected ? "badge--success" : "badge--muted"}`}>
+                    {item.appConnected ? "Live" : "Offline"}
+                  </span>
+                </td>
                 <td>{item.distanceKm.toFixed(1)} km</td>
                 <td>{etaFromDistance(item.distanceKm)} min</td>
                 <td>{assignmentStatusByVolunteer.get(item.volunteerId) ?? "PENDING"}</td>

@@ -9,6 +9,7 @@ import {
   signRefreshToken,
   verifyRefreshToken
 } from "../../shared/utils/token";
+import { emitVolunteerAvailabilityChanged } from "../../sockets/realtimeServer";
 import { authRepository, UserRecord, UserRole } from "./auth.repository";
 import { LoginInput, RegisterInput } from "./auth.validation";
 
@@ -87,6 +88,15 @@ export const authService = {
     });
 
     await authRepository.bootstrapRoleProfile({ userId: user.id, role: user.role });
+    if (user.role === "VOLUNTEER") {
+      emitVolunteerAvailabilityChanged({
+        source: "auth:register",
+        userId: user.id,
+        email: user.email,
+        availability: "AVAILABLE",
+        at: new Date().toISOString()
+      });
+    }
     const tokens = await issueTokenPair(user);
 
     return {
@@ -96,23 +106,36 @@ export const authService = {
   },
 
   login: async (input: LoginInput) => {
-    const email = input.email.toLowerCase();
-    const user = await authRepository.findUserByEmail(email);
+    const identifier = input.identifier.trim();
+    const isEmail = identifier.includes("@");
+    const user = isEmail
+      ? await authRepository.findUserByEmail(identifier.toLowerCase())
+      : await authRepository.findUserByPhone(identifier);
 
     if (!user) {
-      throw new AppError("Invalid email or password", 401);
+      throw new AppError("Invalid login or password", 401);
     }
 
     const matches = await comparePassword(input.password, user.password_hash);
 
     if (!matches) {
-      throw new AppError("Invalid email or password", 401);
+      throw new AppError("Invalid login or password", 401);
     }
 
     if (!user.is_active) {
       throw new AppError("Account is disabled", 403);
     }
 
+    await authRepository.bootstrapRoleProfile({ userId: user.id, role: user.role });
+    if (user.role === "VOLUNTEER") {
+      emitVolunteerAvailabilityChanged({
+        source: "auth:login",
+        userId: user.id,
+        email: user.email,
+        availability: "AVAILABLE",
+        at: new Date().toISOString()
+      });
+    }
     const tokens = await issueTokenPair(user);
 
     return {

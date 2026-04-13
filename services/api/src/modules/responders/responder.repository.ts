@@ -1,4 +1,5 @@
 import { db } from "../../database/pool";
+import { realVolunteerUserConditions } from "../../shared/sql/realVolunteerUser";
 
 export type VolunteerRow = {
   id: string;
@@ -36,6 +37,7 @@ export const responderRepository = {
         v.current_longitude
       FROM volunteers v
       INNER JOIN users u ON u.id = v.user_id
+      WHERE ${realVolunteerUserConditions}
       ORDER BY
         CASE v.availability
           WHEN 'AVAILABLE' THEN 1

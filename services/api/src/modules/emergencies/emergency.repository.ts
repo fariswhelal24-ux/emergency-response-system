@@ -1,4 +1,5 @@
 import { db } from "../../database/pool";
+import { realVolunteerUserConditions } from "../../shared/sql/realVolunteerUser";
 import {
   AmbulanceAssignmentStatus,
   CasePriority,
@@ -133,14 +134,19 @@ export const emergencyRepository = {
     ambulanceEtaMinutes?: number;
     volunteerEtaMinutes?: number;
   }): Promise<EmergencyCaseRow> => {
+    const legacyDescription = input.voiceDescription ?? input.transcriptionText ?? input.emergencyType;
+
     const query = await db.query<EmergencyCaseRow>(
       `
       INSERT INTO emergency_cases (
         case_number,
         reporting_user_id,
+        citizen_id,
         emergency_type,
+        incident_type,
         priority,
         status,
+        description,
         voice_description,
         transcription_text,
         ai_analysis,
@@ -159,9 +165,9 @@ export const emergencyRepository = {
         $2,
         $3,
         $4,
-        'NEW',
         $5,
         $6,
+        'NEW',
         $7,
         $8,
         $9,
@@ -171,6 +177,9 @@ export const emergencyRepository = {
         $13,
         $14,
         $15,
+        $16,
+        $17,
+        $18,
         NOW()
       )
       RETURNING *
@@ -178,8 +187,11 @@ export const emergencyRepository = {
       [
         input.caseNumber,
         input.reportingUserId,
+        input.reportingUserId,
+        input.emergencyType,
         input.emergencyType,
         input.priority,
+        legacyDescription,
         input.voiceDescription ?? null,
         input.transcriptionText ?? null,
         input.aiAnalysis ?? null,
@@ -232,8 +244,15 @@ export const emergencyRepository = {
 
       values.push(input.authVolunteerId);
       conditions.push(
-        `EXISTS (SELECT 1 FROM volunteer_assignments va WHERE va.case_id = emergency_cases.id AND va.volunteer_id = $${values.length})`
+        `EXISTS (
+          SELECT 1
+          FROM volunteer_assignments va
+          WHERE va.case_id = emergency_cases.id
+            AND va.volunteer_id = $${values.length}
+            AND va.status IN ('PENDING', 'ACCEPTED', 'ARRIVED')
+        )`
       );
+      conditions.push(`status NOT IN ('CLOSED', 'CANCELLED')`);
     }
 
     if (input.filters.status) {
@@ -288,11 +307,72 @@ export const emergencyRepository = {
         ambulance_eta_minutes = COALESCE($3, ambulance_eta_minutes),
         volunteer_eta_minutes = COALESCE($4, volunteer_eta_minutes),
         updated_at = NOW(),
-        closed_at = CASE WHEN $2 IN ('CLOSED', 'CANCELLED') THEN NOW() ELSE closed_at END
+        closed_at = CASE
+          WHEN $2 IN ('CLOSED'::case_status, 'CANCELLED'::case_status) THEN NOW()
+          ELSE closed_at
+        END
       WHERE id = $1
       RETURNING *
       `,
       [input.caseId, input.status, input.ambulanceEtaMinutes ?? null, input.volunteerEtaMinutes ?? null]
+    );
+
+    return query.rows[0] ?? null;
+  },
+
+  updateCaseDetails: async (input: {
+    caseId: string;
+    emergencyType?: string;
+    priority?: CasePriority;
+    voiceDescription?: string;
+    transcriptionText?: string;
+    aiAnalysis?: string;
+    possibleCondition?: string;
+    riskLevel?: string;
+    address?: string;
+    latitude?: number;
+    longitude?: number;
+    etaMinutes?: number;
+    ambulanceEtaMinutes?: number;
+    volunteerEtaMinutes?: number;
+  }): Promise<EmergencyCaseRow | null> => {
+    const query = await db.query<EmergencyCaseRow>(
+      `
+      UPDATE emergency_cases
+      SET
+        emergency_type = COALESCE($2, emergency_type),
+        priority = COALESCE($3, priority),
+        voice_description = COALESCE($4, voice_description),
+        transcription_text = COALESCE($5, transcription_text),
+        ai_analysis = COALESCE($6, ai_analysis),
+        possible_condition = COALESCE($7, possible_condition),
+        risk_level = COALESCE($8, risk_level),
+        address_text = COALESCE($9, address_text),
+        latitude = COALESCE($10, latitude),
+        longitude = COALESCE($11, longitude),
+        eta_minutes = COALESCE($12, eta_minutes),
+        ambulance_eta_minutes = COALESCE($13, ambulance_eta_minutes),
+        volunteer_eta_minutes = COALESCE($14, volunteer_eta_minutes),
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+      `,
+      [
+        input.caseId,
+        input.emergencyType ?? null,
+        input.priority ?? null,
+        input.voiceDescription ?? null,
+        input.transcriptionText ?? null,
+        input.aiAnalysis ?? null,
+        input.possibleCondition ?? null,
+        input.riskLevel ?? null,
+        input.address ?? null,
+        input.latitude ?? null,
+        input.longitude ?? null,
+        input.etaMinutes ?? null,
+        input.ambulanceEtaMinutes ?? null,
+        input.volunteerEtaMinutes ?? null
+      ]
     );
 
     return query.rows[0] ?? null;
@@ -458,11 +538,13 @@ export const emergencyRepository = {
         status = $2,
         eta_minutes = COALESCE($3, eta_minutes),
         responded_at = CASE
-          WHEN $2 IN ('ACCEPTED', 'DECLINED') AND responded_at IS NULL THEN NOW()
+          WHEN $2 IN ('ACCEPTED'::volunteer_assignment_status, 'DECLINED'::volunteer_assignment_status)
+            AND responded_at IS NULL
+          THEN NOW()
           ELSE responded_at
         END,
         arrived_at = CASE
-          WHEN $2 = 'ARRIVED' AND arrived_at IS NULL THEN NOW()
+          WHEN $2 = 'ARRIVED'::volunteer_assignment_status AND arrived_at IS NULL THEN NOW()
           ELSE arrived_at
         END
       WHERE id = $1
@@ -574,6 +656,7 @@ export const emergencyRepository = {
         FROM volunteers v
         INNER JOIN users u ON u.id = v.user_id
         WHERE v.availability = 'AVAILABLE'
+          AND ${realVolunteerUserConditions}
       ) s
       WHERE s.distance_km <= $3
       ORDER BY s.distance_km ASC

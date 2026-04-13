@@ -20,7 +20,13 @@ const envSchema = z.object({
   ACCESS_TOKEN_TTL: z.string().default("15m"),
   REFRESH_TOKEN_TTL: z.string().default("7d"),
   OPENAI_API_KEY: z.string().optional(),
-  OPENAI_MODEL: z.string().default("gpt-4.1")
+  OPENAI_MODEL: z.string().default("gpt-4.1"),
+  OPENAI_VOICE_ANALYSIS_MODEL: z.string().default("gpt-4.1-mini"),
+  OPENAI_TRANSCRIPTION_MODEL: z.string().default("gpt-4o-mini-transcribe"),
+  AI_VOICE_ASSISTANT_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+  AI_VOICE_CONVERSATION_TIMEOUT_MS: z.coerce.number().int().positive().default(4500),
+  AI_VOICE_FIELD_EXTRACTION_TIMEOUT_MS: z.coerce.number().int().positive().default(4500),
+  FCM_SERVER_KEY: z.string().optional()
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -48,5 +54,11 @@ export const env = {
   accessTokenTtl: parsed.data.ACCESS_TOKEN_TTL,
   refreshTokenTtl: parsed.data.REFRESH_TOKEN_TTL,
   openaiApiKey: parsed.data.OPENAI_API_KEY || "",
-  openaiModel: parsed.data.OPENAI_MODEL
+  openaiModel: parsed.data.OPENAI_MODEL,
+  openaiVoiceAnalysisModel: parsed.data.OPENAI_VOICE_ANALYSIS_MODEL,
+  openaiTranscriptionModel: parsed.data.OPENAI_TRANSCRIPTION_MODEL,
+  aiVoiceAssistantTimeoutMs: parsed.data.AI_VOICE_ASSISTANT_TIMEOUT_MS,
+  aiVoiceConversationTimeoutMs: parsed.data.AI_VOICE_CONVERSATION_TIMEOUT_MS,
+  aiVoiceFieldExtractionTimeoutMs: parsed.data.AI_VOICE_FIELD_EXTRACTION_TIMEOUT_MS,
+  fcmServerKey: parsed.data.FCM_SERVER_KEY || ""
 };

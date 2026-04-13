@@ -17,12 +17,14 @@ const buildFamilyId = (): string => `fam-${Date.now()}-${Math.floor(Math.random(
 
 export const SignupScreen = ({
   role,
+  submitting,
   onBack,
   onSwitchToLogin,
   onSubmitUser,
   onSubmitVolunteer
 }: {
   role: AccountType;
+  submitting?: boolean;
   onBack: () => void;
   onSwitchToLogin: () => void;
   onSubmitUser: (input: UserSignupInput) => void;
@@ -33,6 +35,8 @@ export const SignupScreen = ({
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [nationalId, setNationalId] = useState("");
 
   const [cityAddress, setCityAddress] = useState("");
@@ -103,6 +107,14 @@ export const SignupScreen = ({
       nextErrors.email = "Please enter a valid email.";
     }
 
+    if (password.trim().length < 8) {
+      nextErrors.password = "Password must be at least 8 characters.";
+    }
+
+    if (password !== confirmPassword) {
+      nextErrors.confirmPassword = "Passwords do not match.";
+    }
+
     if (role === "USER") {
       if (!cityAddress.trim()) {
         nextErrors.cityAddress = "Address or city is required.";
@@ -133,11 +145,16 @@ export const SignupScreen = ({
       return;
     }
 
+    if (submitting) {
+      return;
+    }
+
     if (role === "USER") {
       onSubmitUser({
         fullName: fullName.trim(),
         phone: phone.trim(),
         email: email.trim(),
+        password: password.trim(),
         nationalId: nationalId.trim() || undefined,
         cityAddress: cityAddress.trim(),
         emergencyContact: emergencyContact.trim(),
@@ -150,6 +167,7 @@ export const SignupScreen = ({
       fullName: fullName.trim(),
       phone: phone.trim(),
       email: email.trim(),
+      password: password.trim(),
       nationalId: nationalId.trim(),
       specialty: specialty.trim(),
       licenseFileRef: licenseFileRef.trim(),
@@ -167,7 +185,7 @@ export const SignupScreen = ({
           <Text style={styles.formBannerText}>
             {role === "USER"
               ? "Create your official emergency profile with identity and family details."
-              : "Submit professional details for verification before operational access."}
+              : "Submit professional details to start volunteer emergency operations."}
           </Text>
         </View>
 
@@ -176,7 +194,7 @@ export const SignupScreen = ({
           subtitle={
             role === "USER"
               ? "Set up your emergency profile and family information."
-              : "Register for medical response and verification workflow."
+              : "Register for medical response workflow."
           }
         />
 
@@ -205,6 +223,24 @@ export const SignupScreen = ({
           autoCapitalize="none"
           keyboardType="email-address"
           error={errors.email}
+        />
+
+        <InputField
+          label="Password"
+          value={password}
+          onChangeText={setPassword}
+          placeholder="At least 8 characters"
+          secureTextEntry
+          error={errors.password}
+        />
+
+        <InputField
+          label="Confirm Password"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          placeholder="Re-enter password"
+          secureTextEntry
+          error={errors.confirmPassword}
         />
 
         <InputField
@@ -299,13 +335,6 @@ export const SignupScreen = ({
           </>
         ) : (
           <>
-            <View style={styles.volunteerNotice}>
-              <Text style={styles.volunteerNoticeTitle}>Verification Required</Text>
-              <Text style={styles.volunteerNoticeText}>
-                Volunteer accounts stay pending until credentials are reviewed and approved.
-              </Text>
-            </View>
-
             <InputField
               label="Profession / Specialty"
               value={specialty}
@@ -332,7 +361,11 @@ export const SignupScreen = ({
           </>
         )}
 
-        <PrimaryButton label="Sign Up" onPress={submit} />
+        <PrimaryButton
+          label={submitting ? "Please wait..." : "Sign Up"}
+          onPress={submit}
+          disabled={submitting}
+        />
         <GhostButton label="Already have an account? Login" onPress={onSwitchToLogin} />
         <GhostButton label="Back" onPress={onBack} />
       </Card>
@@ -345,7 +378,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.md,
-    backgroundColor: "#EEF5F1",
+    backgroundColor: "#EEF4FF",
     padding: spacing.md
   },
   formBannerTitle: {
@@ -364,7 +397,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing.md,
     gap: spacing.sm,
-    backgroundColor: "#F2F8F5"
+    backgroundColor: "#F5F9FF"
   },
   familyTitle: {
     color: colors.ink,
@@ -397,22 +430,5 @@ const styles = StyleSheet.create({
   removeText: {
     color: colors.danger,
     fontWeight: "700"
-  },
-  volunteerNotice: {
-    borderWidth: 1,
-    borderColor: "#E4DCC9",
-    borderRadius: radius.md,
-    backgroundColor: "#F9F4E8",
-    padding: spacing.sm
-  },
-  volunteerNoticeTitle: {
-    color: colors.warning,
-    fontSize: 13,
-    fontWeight: "800"
-  },
-  volunteerNoticeText: {
-    color: colors.inkMuted,
-    marginTop: 4,
-    lineHeight: 19
   }
 });

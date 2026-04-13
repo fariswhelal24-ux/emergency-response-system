@@ -42,11 +42,11 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: radius.round,
-    backgroundColor: "#DDECE5",
+    backgroundColor: "#DCE8FF",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#C4D8CD"
+    borderColor: "#C5D8F5"
   },
   sealText: {
     color: colors.primary,
@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.md,
-    backgroundColor: "#EEF5F1",
+    backgroundColor: "#EEF4FF",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     alignItems: "center",

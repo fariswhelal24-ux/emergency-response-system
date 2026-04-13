@@ -8,6 +8,7 @@ import {
 } from "../emergencies/emergency.validation";
 import { locationRepository } from "../locations/location.repository";
 import { dispatcherRepository } from "./dispatcher.repository";
+import { isVolunteerAppConnected } from "../../sockets/volunteerPresence";
 
 type AuthContext = {
   userId: string;
@@ -25,16 +26,22 @@ export const dispatcherService = {
   getDashboardOverview: async (auth: AuthContext) => {
     ensureDispatcherAccess(auth);
 
-    const [statsRow, activeCases] = await Promise.all([
+    const [statsRow, activeCases, availableVolunteers, registeredVolunteers] = await Promise.all([
       dispatcherRepository.getDashboardStats(),
-      dispatcherRepository.listActiveCases()
+      dispatcherRepository.listActiveCases(),
+      dispatcherRepository.listAvailableVolunteers(),
+      dispatcherRepository.listRegisteredVolunteers()
     ]);
+
+    const volunteersAvailableLive = registeredVolunteers.filter(
+      (row) => row.availability === "AVAILABLE" && isVolunteerAppConnected(row.user_id)
+    ).length;
 
     return {
       stats: {
         activeCases: Number(statsRow.active_cases),
         ambulancesAvailable: Number(statsRow.ambulances_available),
-        volunteersAvailable: Number(statsRow.volunteers_available),
+        volunteersAvailable: volunteersAvailableLive,
         highPriorityIncidents: Number(statsRow.high_priority_incidents)
       },
       activeCases: activeCases.map((item) => ({
@@ -50,6 +57,29 @@ export const dispatcherService = {
         },
         createdAt: item.created_at,
         reportingUserId: item.reporting_user_id
+      })),
+      availableVolunteers: availableVolunteers.map((item) => ({
+        volunteerId: item.volunteer_id,
+        userId: item.user_id,
+        name: item.full_name,
+        email: item.email,
+        specialty: item.specialty,
+        availability: item.availability,
+        phone: item.phone,
+        updatedAt: item.updated_at,
+        appConnected: isVolunteerAppConnected(item.user_id)
+      })),
+      registeredVolunteers: registeredVolunteers.map((item) => ({
+        volunteerId: item.volunteer_id,
+        userId: item.user_id,
+        name: item.full_name,
+        email: item.email,
+        specialty: item.specialty,
+        availability: item.availability,
+        phone: item.phone,
+        updatedAt: item.updated_at,
+        joinedAt: item.created_at,
+        appConnected: isVolunteerAppConnected(item.user_id)
       }))
     };
   },
@@ -147,7 +177,8 @@ export const dispatcherService = {
           name: item.full_name,
           specialty: item.specialty,
           availability: item.availability,
-          distanceKm: Number(item.distance_km)
+          distanceKm: Number(item.distance_km),
+          appConnected: isVolunteerAppConnected(item.user_id)
         })),
         ambulances: nearbyAmbulances.map((item) => ({
           id: item.id,

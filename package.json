@@ -8,12 +8,26 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:api": "npm --workspace @ers/api run dev",
-    "migrate:api": "npm --workspace @ers/api run migrate",
-    "dev:citizen": "npm --workspace @ers/citizen-mobile run start",
-    "dev:volunteer": "npm --workspace @ers/volunteer-mobile run start",
-    "dev:dispatcher": "npm --workspace @ers/dispatcher-dashboard run dev",
-    "build:dispatcher": "npm --workspace @ers/dispatcher-dashboard run build",
-    "check:api": "npm --workspace @ers/api run check"
+    "dev:api": "pnpm --filter @ers/api dev",
+    "migrate:api": "pnpm --filter @ers/api migrate",
+    "dev:mobile": "pnpm run dev:citizen:phone",
+    "dev:mobile:public": "pnpm run dev:citizen:public",
+    "dev:public:unified": "pnpm run dev:citizen:public",
+    "dev:public:volunteer-app": "pnpm run dev:volunteer:public",
+    "dev:one-qr": "pnpm run dev:citizen:phone",
+    "dev:one-qr:public": "pnpm run dev:citizen:public",
+    "dev:citizen": "pnpm --filter @ers/citizen-mobile start",
+    "dev:citizen:phone": "pnpm --filter @ers/citizen-mobile start -- --lan --clear",
+    "dev:citizen:public": "pnpm --filter @ers/citizen-mobile start -- --public --clear",
+    "dev:volunteer": "pnpm --filter @ers/volunteer-mobile start",
+    "dev:volunteer:phone": "pnpm --filter @ers/volunteer-mobile start -- --lan --clear",
+    "dev:volunteer:public": "pnpm --filter @ers/volunteer-mobile start -- --public --clear",
+    "dev:dispatcher": "node ./scripts/dev/start-dispatcher.mjs",
+    "dev:dispatcher:raw": "pnpm --filter @ers/dispatcher-dashboard dev",
+    "build:dispatcher": "pnpm --filter @ers/dispatcher-dashboard build",
+    "check:api": "pnpm --filter @ers/api check"
+  },
+  "devDependencies": {
+    "localtunnel": "^2.0.2"
   }
 }

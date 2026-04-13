@@ -9,7 +9,9 @@ import {
   assignVolunteerSchema,
   closeIncidentSchema,
   createEmergencySchema,
+  initEmergencyCallSchema,
   sendEmergencyUpdateSchema,
+  updateEmergencyDetailsSchema,
   updateEmergencyStatusSchema,
   volunteerResponseSchema
 } from "./emergency.validation";
@@ -18,9 +20,16 @@ export const emergencyRoutes = Router();
 
 emergencyRoutes.use(authenticate);
 
+emergencyRoutes.post("/init", validateBody(initEmergencyCallSchema), asyncHandler(emergencyController.initEmergencyCall));
 emergencyRoutes.post("/", validateBody(createEmergencySchema), asyncHandler(emergencyController.createEmergency));
 emergencyRoutes.get("/", asyncHandler(emergencyController.listEmergencies));
 emergencyRoutes.get("/:caseId", asyncHandler(emergencyController.getEmergencyById));
+emergencyRoutes.patch(
+  "/:caseId",
+  authorizeRoles("DISPATCHER", "ADMIN"),
+  validateBody(updateEmergencyDetailsSchema),
+  asyncHandler(emergencyController.updateDetails)
+);
 emergencyRoutes.patch(
   "/:caseId/status",
   authorizeRoles("VOLUNTEER", "DISPATCHER", "AMBULANCE_CREW", "ADMIN"),

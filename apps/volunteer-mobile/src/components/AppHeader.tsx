@@ -53,11 +53,11 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: radius.round,
-    backgroundColor: "#DCECE4",
+    backgroundColor: "#DEE9FF",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#C2DACD"
+    borderColor: "#C7DAF6"
   },
   avatarLabel: {
     color: colors.primary,

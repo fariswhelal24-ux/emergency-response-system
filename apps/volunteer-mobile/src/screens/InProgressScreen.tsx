@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 
-import { activeEmergency } from "../data/mockVolunteer";
 import { Card, GhostButton, PrimaryButton, ScreenShell, SectionTitle } from "../components/Ui";
 import { colors, radius, spacing } from "../theme/tokens";
 
-export const InProgressScreen = ({ onBackToAccepted }: { onBackToAccepted: () => void }) => {
+export const InProgressScreen = ({
+  etaMinutes,
+  onBackToAccepted
+}: {
+  etaMinutes: number;
+  onBackToAccepted: () => void;
+}) => {
   const [note, setNote] = useState("");
 
   return (
@@ -14,7 +19,7 @@ export const InProgressScreen = ({ onBackToAccepted }: { onBackToAccepted: () =>
         <SectionTitle title="Response In Progress" subtitle="Live route and case coordination" />
 
         <Card style={styles.etaCard}>
-          <Text style={styles.etaValue}>{activeEmergency.etaMinutes} min</Text>
+          <Text style={styles.etaValue}>{etaMinutes} min</Text>
           <Text style={styles.etaLabel}>ETA Countdown</Text>
           <Text style={styles.etaSub}>Ambulance status: en route</Text>
         </Card>
@@ -48,7 +53,7 @@ export const InProgressScreen = ({ onBackToAccepted }: { onBackToAccepted: () =>
 const styles = StyleSheet.create({
   etaCard: {
     alignItems: "center",
-    backgroundColor: "#F1FBF6",
+    backgroundColor: "#EEF5FF",
     marginBottom: spacing.md
   },
   etaValue: {

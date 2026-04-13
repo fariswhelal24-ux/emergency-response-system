@@ -5,11 +5,12 @@ export const volunteerMeta = {
   specialty: "Emergency Physician",
   status: "Available",
   radiusKm: 5,
-  verifiedBadge: "Verified Medical Volunteer"
+  verifiedBadge: "Medical Volunteer"
 };
 
 export const activeEmergency = {
   caseId: "CASE-20260323-0007",
+  caseLabel: "CASE-20260323-0007",
   emergencyType: "Severe breathing difficulty",
   distanceKm: 1.4,
   etaMinutes: 4,
@@ -20,6 +21,10 @@ export const activeEmergency = {
   safeAccess: "Building B, Gate 2, 3rd floor, elevator available.",
   equipmentChecklist: ["Gloves", "Gauze", "Pulse oximeter", "Portable airway kit"],
   quickActions: ["Call Patient", "Message Patient", "Contact Dispatcher", "Send Update"]
+};
+
+export const applyEmergencyPatch = (patch: Partial<typeof activeEmergency>) => {
+  Object.assign(activeEmergency, patch);
 };
 
 export const volunteerHistory: VolunteerHistoryItem[] = [

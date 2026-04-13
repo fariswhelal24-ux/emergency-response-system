@@ -210,10 +210,15 @@ CREATE TABLE IF NOT EXISTS incident_reports (
 
 INSERT INTO ambulances (unit_code, crew_count, support_level, status, current_latitude, current_longitude)
 VALUES
-  ('AMB-101', 3, 'ALS', 'AVAILABLE', 31.9038, 35.2034),
-  ('AMB-204', 2, 'BLS', 'AVAILABLE', 31.9011, 35.2102),
-  ('AMB-302', 2, 'BLS', 'DISPATCHED', 31.8955, 35.1982)
+  ('AMB-BETH-001', 2, 'BLS', 'AVAILABLE', 31.7054, 35.2024)
 ON CONFLICT (unit_code) DO NOTHING;
+
+UPDATE ambulances
+SET
+  status = CASE WHEN unit_code = 'AMB-BETH-001' THEN 'AVAILABLE' ELSE 'OFFLINE' END,
+  current_latitude = CASE WHEN unit_code = 'AMB-BETH-001' THEN 31.7054 ELSE current_latitude END,
+  current_longitude = CASE WHEN unit_code = 'AMB-BETH-001' THEN 35.2024 ELSE current_longitude END,
+  updated_at = NOW();
 
 INSERT INTO medical_profiles (user_id)
 SELECT id

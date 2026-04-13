@@ -1,15 +1,47 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { volunteerHistory, volunteerMeta, volunteerStats } from "../data/mockVolunteer";
 import { Card, ScreenShell, SectionTitle } from "../components/Ui";
 import { colors, radius, spacing } from "../theme/tokens";
 
 const tabs = ["Recent", "Critical", "All Time"] as const;
 type HistoryTab = (typeof tabs)[number];
 
-export const HistoryScreen = () => {
+type HistoryItem = {
+  id: string;
+  emergencyType: string;
+  address: string;
+  responseTime: string;
+  outcome: string;
+};
+
+export const HistoryScreen = ({
+  profile,
+  history
+}: {
+  profile: {
+    name: string;
+    specialty: string;
+    verificationBadge: string;
+  };
+  history: HistoryItem[];
+}) => {
   const [activeTab, setActiveTab] = useState<HistoryTab>("Recent");
+
+  const volunteerHistory = history;
+  const volunteerMeta = {
+    name: profile.name,
+    specialty: profile.specialty,
+    verifiedBadge: profile.verificationBadge
+  };
+  const volunteerStats = {
+    incidentsResponded: volunteerHistory.length,
+    averageRating: 0,
+    yearsVolunteering: 0,
+    ambulanceHandoffs: volunteerHistory.length,
+    firstAidRendered: volunteerHistory.length,
+    updatesShared: volunteerHistory.length
+  };
 
   return (
     <ScreenShell>
@@ -88,7 +120,7 @@ export const HistoryScreen = () => {
 const styles = StyleSheet.create({
   headerCard: {
     marginBottom: spacing.md,
-    backgroundColor: "#F5FBF8"
+    backgroundColor: "#F5F9FF"
   },
   name: {
     color: colors.ink,
@@ -132,7 +164,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
-    backgroundColor: "#EEF4F1"
+    backgroundColor: "#EEF4FF"
   },
   tabButtonActive: {
     backgroundColor: colors.primarySoft

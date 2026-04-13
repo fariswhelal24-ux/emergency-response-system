@@ -1,28 +1,35 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { userHistory } from "../data/mockCitizen";
 import { Card, ScreenShell, SectionTitle } from "../components/Ui";
 import { colors, radius, spacing } from "../theme/tokens";
 
-export const HistoryScreen = () => {
+type HistoryItem = {
+  id: string;
+  dateTime: string;
+  emergencyType: string;
+  address: string;
+  status: string;
+};
+
+export const HistoryScreen = ({ items }: { items: HistoryItem[] }) => {
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(() => {
     const normalized = search.trim().toLowerCase();
 
     if (!normalized) {
-      return userHistory;
+      return items;
     }
 
-    return userHistory.filter((item) => {
+    return items.filter((item) => {
       return (
         item.emergencyType.toLowerCase().includes(normalized) ||
         item.address.toLowerCase().includes(normalized) ||
         item.id.toLowerCase().includes(normalized)
       );
     });
-  }, [search]);
+  }, [items, search]);
 
   return (
     <ScreenShell>

@@ -7,7 +7,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   Share,
   StyleSheet,
@@ -16,6 +15,7 @@ import {
   View
 } from "react-native";
 import * as Haptics from "expo-haptics";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { sendMedicalChatMessage } from "../services/api";
 import { radius, spacing } from "../theme/tokens";

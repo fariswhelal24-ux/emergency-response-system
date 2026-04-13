@@ -1,13 +1,13 @@
 import { PropsWithChildren } from "react";
 import {
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
   ViewStyle
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { colors, radius, spacing } from "../theme/tokens";
 
@@ -36,22 +36,26 @@ export const PrimaryButton = ({
   label,
   onPress,
   danger,
-  small
+  small,
+  disabled
 }: {
   label: string;
   onPress: () => void;
   danger?: boolean;
   small?: boolean;
+  disabled?: boolean;
 }) => (
   <Pressable
+    disabled={disabled}
     onPress={onPress}
     style={[
       styles.primaryButton,
       danger ? styles.primaryDanger : styles.primaryInfo,
-      small && styles.smallButton
+      small && styles.smallButton,
+      disabled && styles.primaryButtonDisabled
     ]}
   >
-    <Text style={styles.primaryButtonText}>{label}</Text>
+    <Text style={[styles.primaryButtonText, disabled && styles.primaryButtonTextDisabled]}>{label}</Text>
   </Pressable>
 );
 
@@ -143,6 +147,12 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "800",
     fontSize: 15
+  },
+  primaryButtonDisabled: {
+    opacity: 0.55
+  },
+  primaryButtonTextDisabled: {
+    opacity: 0.95
   },
   ghostButton: {
     borderRadius: radius.xl,

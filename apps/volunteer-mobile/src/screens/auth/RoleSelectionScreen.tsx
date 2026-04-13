@@ -14,13 +14,13 @@ const roleItems: Array<{
     key: "USER",
     title: "Normal User",
     subtitle: "Citizen / Patient",
-    description: "Request emergency help, track response updates, and maintain family medical records."
+    description: "Request emergency assistance, manage family medical details, and receive guided updates."
   },
   {
     key: "VOLUNTEER",
     title: "Volunteer",
     subtitle: "Medical Responder",
-    description: "Use verified volunteer workflows for alerts, navigation, and field coordination."
+    description: "Verified medical volunteer account with controlled incident and dispatch access."
   }
 ];
 
@@ -36,9 +36,9 @@ export const RoleSelectionScreen = ({
   <ScreenShell>
     <Card>
       <View style={styles.headerBlock}>
-        <Text style={styles.kicker}>Emergency Service Access</Text>
+        <Text style={styles.kicker}>National Emergency Access</Text>
         <Text style={styles.title}>Choose Account Type</Text>
-        <Text style={styles.subtitle}>Select your role to continue to the correct authentication flow.</Text>
+        <Text style={styles.subtitle}>Select the workflow that matches your role in the service.</Text>
       </View>
 
       <View style={styles.listWrap}>
@@ -71,8 +71,8 @@ const styles = StyleSheet.create({
   kicker: {
     alignSelf: "flex-start",
     borderRadius: radius.round,
-    backgroundColor: colors.primarySoft,
-    color: colors.primary,
+    backgroundColor: colors.infoSoft,
+    color: colors.info,
     fontWeight: "800",
     fontSize: 11,
     paddingHorizontal: spacing.sm,
@@ -102,8 +102,8 @@ const styles = StyleSheet.create({
     gap: 6
   },
   roleCardActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft
+    borderColor: colors.info,
+    backgroundColor: colors.infoSoft
   },
   roleTitle: {
     color: colors.ink,
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   roleTitleActive: {
-    color: colors.primary
+    color: colors.info
   },
   roleSubtitle: {
     color: colors.inkMuted,
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase"
   },
   roleSubtitleActive: {
-    color: colors.primary
+    color: colors.info
   },
   roleCopy: {
     color: colors.inkMuted,

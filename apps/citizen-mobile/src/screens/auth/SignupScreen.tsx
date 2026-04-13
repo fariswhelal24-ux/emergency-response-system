@@ -17,12 +17,14 @@ const buildFamilyId = (): string => `fam-${Date.now()}-${Math.floor(Math.random(
 
 export const SignupScreen = ({
   role,
+  submitting,
   onBack,
   onSwitchToLogin,
   onSubmitUser,
   onSubmitVolunteer
 }: {
   role: AccountType;
+  submitting?: boolean;
   onBack: () => void;
   onSwitchToLogin: () => void;
   onSubmitUser: (input: UserSignupInput) => void;
@@ -33,6 +35,8 @@ export const SignupScreen = ({
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [nationalId, setNationalId] = useState("");
 
   const [cityAddress, setCityAddress] = useState("");
@@ -103,6 +107,14 @@ export const SignupScreen = ({
       nextErrors.email = "Please enter a valid email.";
     }
 
+    if (password.trim().length < 8) {
+      nextErrors.password = "Password must be at least 8 characters.";
+    }
+
+    if (password !== confirmPassword) {
+      nextErrors.confirmPassword = "Passwords do not match.";
+    }
+
     if (role === "USER") {
       if (!cityAddress.trim()) {
         nextErrors.cityAddress = "Address or city is required.";
@@ -133,11 +145,16 @@ export const SignupScreen = ({
       return;
     }
 
+    if (submitting) {
+      return;
+    }
+
     if (role === "USER") {
       onSubmitUser({
         fullName: fullName.trim(),
         phone: phone.trim(),
         email: email.trim(),
+        password: password.trim(),
         nationalId: nationalId.trim() || undefined,
         cityAddress: cityAddress.trim(),
         emergencyContact: emergencyContact.trim(),
@@ -150,6 +167,7 @@ export const SignupScreen = ({
       fullName: fullName.trim(),
       phone: phone.trim(),
       email: email.trim(),
+      password: password.trim(),
       nationalId: nationalId.trim(),
       specialty: specialty.trim(),
       licenseFileRef: licenseFileRef.trim(),
@@ -205,6 +223,24 @@ export const SignupScreen = ({
           autoCapitalize="none"
           keyboardType="email-address"
           error={errors.email}
+        />
+
+        <InputField
+          label="Password"
+          value={password}
+          onChangeText={setPassword}
+          placeholder="At least 8 characters"
+          secureTextEntry
+          error={errors.password}
+        />
+
+        <InputField
+          label="Confirm Password"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          placeholder="Re-enter password"
+          secureTextEntry
+          error={errors.confirmPassword}
         />
 
         <InputField
@@ -332,7 +368,11 @@ export const SignupScreen = ({
           </>
         )}
 
-        <PrimaryButton label="Sign Up" onPress={submit} />
+        <PrimaryButton
+          label={submitting ? "Please wait..." : "Sign Up"}
+          onPress={submit}
+          disabled={submitting}
+        />
         <GhostButton label="Already have an account? Login" onPress={onSwitchToLogin} />
         <GhostButton label="Back" onPress={onBack} />
       </Card>

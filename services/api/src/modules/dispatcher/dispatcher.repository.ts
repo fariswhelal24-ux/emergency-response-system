@@ -1,4 +1,5 @@
 import { db } from "../../database/pool";
+import { realVolunteerUserConditions } from "../../shared/sql/realVolunteerUser";
 
 export type DashboardStatsRow = {
   active_cases: string;
@@ -18,6 +19,29 @@ export type DispatcherCaseRow = {
   longitude: string;
   created_at: Date;
   reporting_user_id: string;
+};
+
+export type AvailableVolunteerRow = {
+  volunteer_id: string;
+  user_id: string;
+  full_name: string;
+  email: string;
+  specialty: string;
+  availability: string;
+  phone: string | null;
+  updated_at: Date;
+};
+
+export type RegisteredVolunteerRow = {
+  volunteer_id: string;
+  user_id: string;
+  full_name: string;
+  email: string;
+  specialty: string;
+  availability: string;
+  phone: string | null;
+  updated_at: Date;
+  created_at: Date;
 };
 
 export type DetailedCaseRow = {
@@ -69,7 +93,13 @@ export const dispatcherRepository = {
       SELECT
         (SELECT COUNT(*) FROM emergency_cases WHERE status NOT IN ('CLOSED', 'CANCELLED')) AS active_cases,
         (SELECT COUNT(*) FROM ambulances WHERE status = 'AVAILABLE') AS ambulances_available,
-        (SELECT COUNT(*) FROM volunteers WHERE availability = 'AVAILABLE') AS volunteers_available,
+        (
+          SELECT COUNT(*)
+          FROM volunteers v
+          INNER JOIN users u ON u.id = v.user_id
+          WHERE v.availability = 'AVAILABLE'
+            AND ${realVolunteerUserConditions}
+        ) AS volunteers_available,
         (SELECT COUNT(*) FROM emergency_cases WHERE priority IN ('HIGH', 'CRITICAL') AND status NOT IN ('CLOSED', 'CANCELLED')) AS high_priority_incidents
       `
     );
@@ -94,14 +124,72 @@ export const dispatcherRepository = {
       FROM emergency_cases
       WHERE status NOT IN ('CLOSED', 'CANCELLED')
       ORDER BY
+        created_at DESC,
         CASE priority
           WHEN 'CRITICAL' THEN 1
           WHEN 'HIGH' THEN 2
           WHEN 'MEDIUM' THEN 3
           ELSE 4
-        END,
-        created_at DESC
+        END
       `
+    );
+
+    return query.rows;
+  },
+
+  listAvailableVolunteers: async (limit: number = 12): Promise<AvailableVolunteerRow[]> => {
+    const query = await db.query<AvailableVolunteerRow>(
+      `
+      SELECT
+        v.id AS volunteer_id,
+        v.user_id,
+        u.full_name,
+        u.email,
+        v.specialty,
+        v.availability,
+        u.phone,
+        v.updated_at
+      FROM volunteers v
+      INNER JOIN users u ON u.id = v.user_id
+      WHERE v.availability = 'AVAILABLE'
+        AND ${realVolunteerUserConditions}
+      ORDER BY v.updated_at DESC, u.full_name ASC
+      LIMIT $1
+      `,
+      [limit]
+    );
+
+    return query.rows;
+  },
+
+  listRegisteredVolunteers: async (limit: number = 200): Promise<RegisteredVolunteerRow[]> => {
+    const query = await db.query<RegisteredVolunteerRow>(
+      `
+      SELECT
+        v.id AS volunteer_id,
+        v.user_id,
+        u.full_name,
+        u.email,
+        v.specialty,
+        v.availability,
+        u.phone,
+        v.updated_at,
+        u.created_at
+      FROM volunteers v
+      INNER JOIN users u ON u.id = v.user_id
+      WHERE ${realVolunteerUserConditions}
+      ORDER BY
+        CASE v.availability
+          WHEN 'AVAILABLE' THEN 1
+          WHEN 'BUSY' THEN 2
+          WHEN 'OFF_DUTY' THEN 3
+          ELSE 4
+        END,
+        v.updated_at DESC,
+        u.full_name ASC
+      LIMIT $1
+      `,
+      [limit]
     );
 
     return query.rows;

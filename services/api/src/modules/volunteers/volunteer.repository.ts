@@ -1,4 +1,5 @@
 import { db } from "../../database/pool";
+import { realVolunteerUserConditions } from "../../shared/sql/realVolunteerUser";
 
 export type VolunteerProfileRow = {
   id: string;
@@ -222,6 +223,7 @@ export const volunteerRepository = {
         FROM volunteers v
         INNER JOIN users u ON u.id = v.user_id
         WHERE v.availability = 'AVAILABLE'
+          AND ${realVolunteerUserConditions}
       ) s
       WHERE s.distance_km <= $3
       ORDER BY s.distance_km ASC

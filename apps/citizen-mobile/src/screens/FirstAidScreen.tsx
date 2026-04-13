@@ -1,20 +1,60 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { liveCase } from "../data/mockCitizen";
 import { Card, GhostButton, PrimaryButton, ScreenShell, SectionTitle } from "../components/Ui";
 import { colors, radius, spacing } from "../theme/tokens";
 
-export const FirstAidScreen = ({ onBack }: { onBack: () => void }) => {
+type FirstAidStep = {
+  id: string;
+  title: string;
+  description: string;
+};
+
+const defaultSteps: FirstAidStep[] = [
+  {
+    id: "1",
+    title: "Check responsiveness",
+    description: "Talk to the patient and check if they respond."
+  },
+  {
+    id: "2",
+    title: "Check breathing",
+    description: "Look for chest movement and listen for airflow."
+  },
+  {
+    id: "3",
+    title: "Control severe bleeding",
+    description: "Apply direct pressure with a clean cloth if bleeding is severe."
+  },
+  {
+    id: "4",
+    title: "Keep dispatcher updated",
+    description: "Report any worsening symptoms immediately."
+  }
+];
+
+export const FirstAidScreen = ({
+  emergencyAddress,
+  ambulanceEtaMinutes,
+  volunteerEtaMinutes,
+  firstAidSteps = defaultSteps,
+  onBack
+}: {
+  emergencyAddress: string;
+  ambulanceEtaMinutes: number | null;
+  volunteerEtaMinutes: number | null;
+  firstAidSteps?: FirstAidStep[];
+  onBack: () => void;
+}) => {
   const [stepIndex, setStepIndex] = useState(0);
-  const activeStep = liveCase.firstAidSteps[stepIndex];
+  const activeStep = firstAidSteps[stepIndex] ?? firstAidSteps[0];
 
   return (
     <ScreenShell>
       <Card>
         <SectionTitle
           title="AI Guidance Active"
-          subtitle={`Ambulance ETA ${liveCase.etaMinutes} min • Volunteer ETA ${liveCase.volunteerEtaMinutes} min`}
+          subtitle={`Ambulance ETA ${ambulanceEtaMinutes ?? "N/A"} min • Volunteer ETA ${volunteerEtaMinutes ?? "N/A"} min`}
         />
 
         <Card style={styles.stepCard}>
@@ -27,7 +67,7 @@ export const FirstAidScreen = ({ onBack }: { onBack: () => void }) => {
               label="Done"
               small
               onPress={() => {
-                if (stepIndex < liveCase.firstAidSteps.length - 1) {
+                if (stepIndex < firstAidSteps.length - 1) {
                   setStepIndex(stepIndex + 1);
                 }
               }}
@@ -35,7 +75,7 @@ export const FirstAidScreen = ({ onBack }: { onBack: () => void }) => {
             <GhostButton
               label="Next"
               onPress={() => {
-                if (stepIndex < liveCase.firstAidSteps.length - 1) {
+                if (stepIndex < firstAidSteps.length - 1) {
                   setStepIndex(stepIndex + 1);
                 }
               }}
@@ -61,7 +101,7 @@ export const FirstAidScreen = ({ onBack }: { onBack: () => void }) => {
 
         <Card style={styles.miniMapCard}>
           <Text style={styles.mapStatus}>Mini ETA Status</Text>
-          <Text style={styles.mapCopy}>Patient: {liveCase.address}</Text>
+          <Text style={styles.mapCopy}>Patient: {emergencyAddress}</Text>
           <Text style={styles.mapCopy}>Ambulance route active • Volunteer route active</Text>
         </Card>
 

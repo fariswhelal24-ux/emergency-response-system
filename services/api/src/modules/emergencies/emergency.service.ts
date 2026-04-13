@@ -1,12 +1,21 @@
+import { randomUUID } from "node:crypto";
+
+import { authRepository } from "../auth/auth.repository";
 import { AppError } from "../../shared/errors/AppError";
+import { pushNotificationService } from "../../shared/services/push-notifications";
+import { virtualAmbulanceService } from "../../shared/services/virtual-ambulance";
 import { UserRole } from "../../shared/types/domain";
+import { findNearestVolunteers } from "../../shared/utils/geo";
+import { hashPassword } from "../../shared/utils/password";
 import {
   AssignAmbulanceInput,
   AssignVolunteerInput,
   CloseIncidentInput,
   CreateEmergencyInput,
+  InitEmergencyCallInput,
   EmergencyListQueryInput,
   SendEmergencyUpdateInput,
+  UpdateEmergencyDetailsInput,
   UpdateEmergencyStatusInput,
   VolunteerResponseInput
 } from "./emergency.validation";
@@ -22,6 +31,24 @@ type AuthContext = {
   userId: string;
   role: UserRole;
   email: string;
+};
+
+const estimateEtaMinutesFromDistance = (distanceKm?: number | null): number | undefined => {
+  if (distanceKm === undefined || distanceKm === null || Number.isNaN(distanceKm)) {
+    return undefined;
+  }
+
+  // Conservative urban speed estimate for emergency routing.
+  const minutes = Math.ceil((distanceKm / 35) * 60);
+  return Math.max(1, Math.min(60, minutes));
+};
+
+const detectCaseLanguage = (...parts: Array<string | null | undefined>): "ar" | "en" => {
+  const joined = parts
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+
+  return /[\u0600-\u06FF]/.test(joined) ? "ar" : "en";
 };
 
 const toCaseDto = (row: EmergencyCaseRow) => ({
@@ -114,13 +141,112 @@ const assertCaseAccess = async (auth: AuthContext, caseId: string, reporterUserI
   }
 };
 
+const normalizeCallerPhone = (value?: string): string | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const cleaned = value.trim().replace(/\s+/g, "");
+  if (!cleaned) {
+    return undefined;
+  }
+
+  if (/^\+?[0-9-]{4,32}$/.test(cleaned)) {
+    return cleaned;
+  }
+
+  return undefined;
+};
+
+const sanitizeCallerName = (value?: string): string | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const cleaned = value.trim().replace(/\s+/g, " ");
+  return cleaned.length >= 2 ? cleaned.slice(0, 120) : undefined;
+};
+
+const buildCallerEmail = (callerPhone?: string): string => {
+  const digits = (callerPhone ?? "").replace(/\D/g, "");
+  const localPart = digits ? `caller.${digits}` : `caller.${Date.now()}.${randomUUID().slice(0, 8)}`;
+  return `${localPart}@rapidaid.local`;
+};
+
+const resolveReporterForEmergency = async (
+  auth: AuthContext,
+  input: CreateEmergencyInput
+): Promise<{ reportingUserId: string; callerPhone?: string; callerName?: string }> => {
+  const isDispatcherRequest = auth.role === "DISPATCHER" || auth.role === "ADMIN";
+
+  if (!isDispatcherRequest) {
+    return {
+      reportingUserId: auth.userId
+    };
+  }
+
+  if (input.callerUserId) {
+    const callerUser = await authRepository.findUserById(input.callerUserId);
+    if (!callerUser || callerUser.role !== "CITIZEN") {
+      throw new AppError("callerUserId must reference an active citizen account", 400);
+    }
+
+    return {
+      reportingUserId: callerUser.id,
+      callerPhone: callerUser.phone ?? undefined,
+      callerName: callerUser.full_name
+    };
+  }
+
+  const callerPhone = normalizeCallerPhone(input.callerPhone);
+  const callerName = sanitizeCallerName(input.callerName);
+
+  if (!callerPhone) {
+    throw new AppError("callerPhone is required when dispatcher creates a case", 400);
+  }
+
+  const existingCaller = await authRepository.findCitizenByPhone(callerPhone);
+  if (existingCaller) {
+    return {
+      reportingUserId: existingCaller.id,
+      callerPhone,
+      callerName: existingCaller.full_name
+    };
+  }
+
+  let callerEmail = buildCallerEmail(callerPhone);
+  while (await authRepository.findUserByEmail(callerEmail)) {
+    callerEmail = `caller.${Date.now()}.${randomUUID().slice(0, 8)}@rapidaid.local`;
+  }
+
+  const createdCaller = await authRepository.createUser({
+    fullName: callerName ?? `Caller ${callerPhone}`,
+    email: callerEmail,
+    phone: callerPhone,
+    passwordHash: await hashPassword(randomUUID()),
+    role: "CITIZEN"
+  });
+
+  await authRepository.bootstrapRoleProfile({
+    userId: createdCaller.id,
+    role: createdCaller.role
+  });
+
+  return {
+    reportingUserId: createdCaller.id,
+    callerPhone,
+    callerName: createdCaller.full_name
+  };
+};
+
 export const emergencyService = {
   createEmergency: async (auth: AuthContext, input: CreateEmergencyInput) => {
+    const reporter = await resolveReporterForEmergency(auth, input);
     const caseNumber = await emergencyRepository.generateCaseNumber();
 
     const created = await emergencyRepository.createEmergencyCase({
       caseNumber,
-      reportingUserId: auth.userId,
+      reportingUserId: reporter.reportingUserId,
       emergencyType: input.emergencyType,
       priority: input.priority,
       voiceDescription: input.voiceDescription,
@@ -143,11 +269,172 @@ export const emergencyService = {
       message: "Emergency request created",
       payload: {
         priority: created.priority,
-        status: created.status
+        status: created.status,
+        reportingUserId: reporter.reportingUserId,
+        callerPhone: reporter.callerPhone ?? null,
+        callerName: reporter.callerName ?? null
+      }
+    });
+    let currentCase = created;
+    let ambulanceAssignment: ReturnType<typeof toAmbulanceAssignmentDto> | null = null;
+    const volunteerAssignments: ReturnType<typeof toVolunteerAssignmentDto>[] = [];
+    const emergencyLocation = {
+      latitude: Number(created.latitude),
+      longitude: Number(created.longitude)
+    };
+
+    const nearestAmbulance = await emergencyRepository.findNearestAmbulance({
+      latitude: emergencyLocation.latitude,
+      longitude: emergencyLocation.longitude
+    });
+
+    if (nearestAmbulance?.id) {
+      const ambulanceDistanceKm = Number(nearestAmbulance.distance_km);
+      const ambulanceEtaMinutes = estimateEtaMinutesFromDistance(ambulanceDistanceKm);
+
+      const assignedAmbulance = await emergencyRepository.assignAmbulance({
+        caseId: created.id,
+        ambulanceId: nearestAmbulance.id,
+        assignedByUserId: auth.userId,
+        etaMinutes: ambulanceEtaMinutes,
+        distanceKm: ambulanceDistanceKm
+      });
+
+      const caseAfterAmbulance = await emergencyRepository.updateCaseStatus({
+        caseId: created.id,
+        status: "AMBULANCE_ASSIGNED",
+        ambulanceEtaMinutes: assignedAmbulance.eta_minutes ?? ambulanceEtaMinutes
+      });
+
+      if (caseAfterAmbulance) {
+        currentCase = caseAfterAmbulance;
+      }
+
+      ambulanceAssignment = toAmbulanceAssignmentDto(assignedAmbulance);
+    }
+
+    const nearbyVolunteers = await emergencyRepository.listNearbyVolunteers({
+      latitude: emergencyLocation.latitude,
+      longitude: emergencyLocation.longitude,
+      radiusKm: 30,
+      limit: 50
+    });
+    const nearestVolunteers = findNearestVolunteers(
+      emergencyLocation,
+      nearbyVolunteers.map((volunteer) => ({
+        ...volunteer,
+        latitude: volunteer.current_latitude ? Number(volunteer.current_latitude) : null,
+        longitude: volunteer.current_longitude ? Number(volunteer.current_longitude) : null
+      })),
+      5
+    );
+
+    for (const nearby of nearestVolunteers) {
+      const distanceKm = Number(nearby.distanceKm);
+      const etaMinutes = estimateEtaMinutesFromDistance(distanceKm);
+
+      const assignment = await emergencyRepository.assignVolunteer({
+        caseId: created.id,
+        volunteerId: nearby.volunteer_id,
+        assignedByUserId: auth.userId,
+        etaMinutes,
+        distanceKm
+      });
+
+      volunteerAssignments.push(toVolunteerAssignmentDto(assignment));
+    }
+
+    const pushDispatch = await pushNotificationService.sendEmergencyAlert({
+      targets: nearestVolunteers.map((volunteer) => ({
+        volunteerId: volunteer.volunteer_id,
+        userId: volunteer.user_id
+      })),
+      payload: {
+        emergencyId: created.id,
+        location: emergencyLocation,
+        type: created.emergency_type,
+        severity: currentCase.priority,
+        summary: created.voice_description ?? created.transcription_text ?? undefined,
+        language: detectCaseLanguage(
+          created.voice_description,
+          created.transcription_text,
+          created.ai_analysis,
+          created.emergency_type
+        )
       }
     });
 
-    return toCaseDto(created);
+    if (volunteerAssignments.length > 0) {
+      const fastestVolunteerEta = volunteerAssignments
+        .map((assignment) => assignment.etaMinutes)
+        .filter((eta): eta is number => typeof eta === "number")
+        .sort((a, b) => a - b)[0];
+
+      const caseAfterVolunteerNotification = await emergencyRepository.updateCaseStatus({
+        caseId: created.id,
+        status: "VOLUNTEERS_NOTIFIED",
+        volunteerEtaMinutes: fastestVolunteerEta
+      });
+
+      if (caseAfterVolunteerNotification) {
+        currentCase = caseAfterVolunteerNotification;
+      }
+    }
+
+    await emergencyRepository.createEmergencyUpdate({
+      caseId: created.id,
+      authorUserId: auth.userId,
+      updateType: "AUTO_DISPATCHED",
+      message: "Auto-dispatch started (ambulance + nearest volunteers)",
+      payload: {
+        ambulanceAssigned: Boolean(ambulanceAssignment),
+        volunteerRequestsCount: volunteerAssignments.length
+      }
+    });
+
+    return {
+      ...toCaseDto(currentCase),
+      autoDispatch: {
+        ambulanceAssignment,
+        volunteerAssignments,
+        notifications: pushDispatch
+      }
+    };
+  },
+
+  initEmergencyCall: async (auth: AuthContext, input: InitEmergencyCallInput) => {
+    if (auth.role === "AMBULANCE_CREW") {
+      throw new AppError("Ambulance crew cannot initialize emergency calls directly", 403);
+    }
+
+    const requestedUserId = input.userId?.trim();
+
+    if ((auth.role === "CITIZEN" || auth.role === "VOLUNTEER") && requestedUserId && requestedUserId !== auth.userId) {
+      throw new AppError("You can only initialize calls for your own account", 403);
+    }
+
+    if ((auth.role === "DISPATCHER" || auth.role === "ADMIN") && !requestedUserId) {
+      throw new AppError("userId is required when dispatcher initializes a call", 400);
+    }
+
+    const linkedCallerUserId =
+      auth.role === "CITIZEN" || auth.role === "VOLUNTEER" ? auth.userId : requestedUserId ?? auth.userId;
+    const isVolunteerCaller = auth.role === "VOLUNTEER";
+
+    return emergencyService.createEmergency(auth, {
+      emergencyType: (input.callType || (isVolunteerCaller ? "Volunteer Emergency Call" : "Emergency Voice Call")).trim(),
+      priority: isVolunteerCaller ? "CRITICAL" : "HIGH",
+      voiceDescription: isVolunteerCaller
+        ? "Volunteer initiated emergency call. Ambulance dispatch started."
+        : "Emergency call started. AI listening is active.",
+      address: input.location.address?.trim() || "Live caller location",
+      latitude: input.location.latitude,
+      longitude: input.location.longitude,
+      riskLevel: isVolunteerCaller ? "CRITICAL" : "HIGH",
+      ...(auth.role === "DISPATCHER" || auth.role === "ADMIN"
+        ? { callerUserId: linkedCallerUserId }
+        : {})
+    });
   },
 
   listEmergencies: async (auth: AuthContext, query: EmergencyListQueryInput) => {
@@ -215,6 +502,56 @@ export const emergencyService = {
       payload: {
         status: input.status
       }
+    });
+
+    if (input.status === "CLOSED" || input.status === "CANCELLED") {
+      virtualAmbulanceService.stopForCase(caseId);
+    }
+
+    return toCaseDto(updated);
+  },
+
+  updateDetails: async (auth: AuthContext, caseId: string, input: UpdateEmergencyDetailsInput) => {
+    requireRole(auth, ["DISPATCHER", "ADMIN"]);
+
+    const hasAnyField = Object.values(input).some((value) => value !== undefined);
+    if (!hasAnyField) {
+      throw new AppError("At least one field is required for update", 400);
+    }
+
+    const existing = await emergencyRepository.findCaseById(caseId);
+
+    if (!existing) {
+      throw new AppError("Emergency case not found", 404);
+    }
+
+    const updated = await emergencyRepository.updateCaseDetails({
+      caseId,
+      emergencyType: input.emergencyType,
+      priority: input.priority,
+      voiceDescription: input.voiceDescription,
+      transcriptionText: input.transcriptionText,
+      aiAnalysis: input.aiAnalysis,
+      possibleCondition: input.possibleCondition,
+      riskLevel: input.riskLevel,
+      address: input.address,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      etaMinutes: input.etaMinutes,
+      ambulanceEtaMinutes: input.ambulanceEtaMinutes,
+      volunteerEtaMinutes: input.volunteerEtaMinutes
+    });
+
+    if (!updated) {
+      throw new AppError("Emergency case could not be updated", 500);
+    }
+
+    await emergencyRepository.createEmergencyUpdate({
+      caseId,
+      authorUserId: auth.userId,
+      updateType: "CASE_DETAILS_UPDATED",
+      message: "Case details updated by dispatcher",
+      payload: input
     });
 
     return toCaseDto(updated);
@@ -442,6 +779,7 @@ export const emergencyService = {
         resolvedStatus: input.resolvedStatus ?? "RESOLVED"
       }
     });
+    virtualAmbulanceService.stopForCase(caseId);
 
     const updated = await emergencyRepository.findCaseById(caseId);
 

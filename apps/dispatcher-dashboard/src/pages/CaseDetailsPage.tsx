@@ -139,6 +139,7 @@ export const CaseDetailsPage = ({
               <tr>
                 <th>Name</th>
                 <th>Specialty</th>
+                <th>App</th>
                 <th>Distance</th>
                 <th>Status</th>
                 <th>Notify</th>
@@ -154,6 +155,13 @@ export const CaseDetailsPage = ({
                   <tr key={volunteer.volunteerId}>
                     <td>{volunteer.name}</td>
                     <td>{volunteer.specialty}</td>
+                    <td>
+                      <span
+                        className={`badge ${volunteer.appConnected ? "badge--success" : "badge--muted"}`}
+                      >
+                        {volunteer.appConnected ? "Live" : "Offline"}
+                      </span>
+                    </td>
                     <td>{volunteer.distanceKm.toFixed(1)} km</td>
                     <td>{assignment?.status ?? "PENDING"}</td>
                     <td>

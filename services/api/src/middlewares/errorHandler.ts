@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 
+import { env } from "../config/env";
 import { AppError } from "../shared/errors/AppError";
 
 export const errorHandler = (
@@ -25,7 +26,15 @@ export const errorHandler = (
     return;
   }
 
+  // Keep unexpected errors visible in API logs for fast diagnosis.
+  console.error("[UNHANDLED_ERROR]", error);
+
   response.status(500).json({
-    message: "Internal server error"
+    message: "Internal server error",
+    ...(env.isProduction
+      ? {}
+      : {
+          details: error instanceof Error ? error.message : String(error)
+        })
   });
 };

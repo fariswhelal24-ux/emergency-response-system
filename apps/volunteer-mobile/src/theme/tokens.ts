@@ -1,15 +1,15 @@
 export const colors = {
-  background: "#F3F5F8",
+  background: "#F4F8FF",
   surface: "#FFFFFF",
-  surfaceSoft: "#F7FAF8",
+  surfaceSoft: "#F4F8FF",
   ink: "#10243A",
   inkMuted: "#5B6E84",
-  border: "#D3E1DA",
-  primary: "#1A6C4A",
-  primarySoft: "#E6F3ED",
+  border: "#C9DBF5",
+  primary: "#1E63FF",
+  primarySoft: "#EAF2FF",
   danger: "#B4232C",
-  info: "#1E5E95",
-  infoSoft: "#EAF2F9",
+  info: "#255AA7",
+  infoSoft: "#EEF5FF",
   warning: "#A56A1D",
   navInactive: "#7B8EA3"
 };

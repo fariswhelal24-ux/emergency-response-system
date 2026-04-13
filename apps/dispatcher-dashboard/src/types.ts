@@ -22,6 +22,31 @@ export type DashboardStats = {
   highPriorityIncidents: number;
 };
 
+export type AvailableVolunteerSummary = {
+  volunteerId: string;
+  userId: string;
+  name: string;
+  email: string;
+  specialty: string;
+  availability: string;
+  phone: string | null;
+  updatedAt: string;
+  appConnected?: boolean;
+};
+
+export type RegisteredVolunteerSummary = {
+  volunteerId: string;
+  userId: string;
+  name: string;
+  email: string;
+  specialty: string;
+  availability: string;
+  phone: string | null;
+  updatedAt: string;
+  joinedAt: string;
+  appConnected?: boolean;
+};
+
 export type ActiveCase = {
   id: string;
   caseNumber: string;
@@ -103,6 +128,7 @@ export type CaseDetail = {
       specialty: string;
       availability: string;
       distanceKm: number;
+      appConnected?: boolean;
     }>;
     ambulances: Array<{
       id: string;

@@ -157,11 +157,11 @@ Base path: `/api/v1`
 
 ## Setup
 
-1. Install Node.js 20+ and npm.
+1. Install Node.js 20+ and pnpm.
 2. Install dependencies at project root:
 
 ```bash
-npm install
+pnpm install
 ```
 
 3. Configure backend env:
@@ -179,16 +179,26 @@ CREATE DATABASE emergency_response;
 5. Run migrations:
 
 ```bash
-npm run migrate:api
+pnpm run migrate:api
 ```
 
 6. Start services:
 
 ```bash
-npm run dev:api
-npm run dev:dispatcher
-npm run dev:citizen
-npm run dev:volunteer
+pnpm run dev:api
+pnpm run dev:dispatcher
+pnpm run dev:citizen
+pnpm run dev:volunteer
+```
+
+### Cross-network (Public Internet) Mobile Mode
+
+Use public mode when phone and laptop are on different networks:
+
+```bash
+pnpm run dev:citizen:public
+# or
+pnpm run dev:volunteer:public
 ```
 
 ## Current Development Status

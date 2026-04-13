@@ -1,13 +1,13 @@
 import { PropsWithChildren } from "react";
 import {
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
   ViewStyle
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { colors, radius, spacing } from "../theme/tokens";
 
@@ -35,14 +35,20 @@ export const SectionTitle = ({ title, subtitle }: { title: string; subtitle?: st
 export const PrimaryButton = ({
   label,
   onPress,
-  small
+  small,
+  disabled
 }: {
   label: string;
   onPress: () => void;
   small?: boolean;
+  disabled?: boolean;
 }) => (
-  <Pressable onPress={onPress} style={[styles.primaryButton, small && styles.smallButton]}>
-    <Text style={styles.primaryText}>{label}</Text>
+  <Pressable
+    disabled={disabled}
+    onPress={onPress}
+    style={[styles.primaryButton, small && styles.smallButton, disabled && styles.primaryButtonDisabled]}
+  >
+    <Text style={[styles.primaryText, disabled && styles.primaryTextDisabled]}>{label}</Text>
   </Pressable>
 );
 
@@ -63,7 +69,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     height: 220,
-    backgroundColor: "#EAF2EE"
+    backgroundColor: "#EAF2FF"
   },
   bgBandMid: {
     position: "absolute",
@@ -72,7 +78,7 @@ const styles = StyleSheet.create({
     width: 250,
     height: 250,
     borderRadius: radius.round,
-    backgroundColor: "#E4ECE8"
+    backgroundColor: "#E0ECFF"
   },
   content: {
     padding: spacing.lg,
@@ -122,6 +128,12 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "800",
     fontSize: 15
+  },
+  primaryButtonDisabled: {
+    opacity: 0.55
+  },
+  primaryTextDisabled: {
+    opacity: 0.95
   },
   ghostButton: {
     borderRadius: radius.md,

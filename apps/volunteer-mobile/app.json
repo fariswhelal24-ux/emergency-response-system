@@ -4,6 +4,17 @@
     "slug": "volunteer-response",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light"
+    "userInterfaceStyle": "light",
+    "android": {
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "ios": {
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "RapidAid volunteer app uses live location to receive and navigate emergency assignments."
+      }
+    }
   }
 }
