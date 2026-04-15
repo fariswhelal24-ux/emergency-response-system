@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { userRoles } from "../../shared/types/domain";
+import { userRoles } from "../../shared/types/domain.js";
 
 const roleSchema = z.enum(userRoles);
 

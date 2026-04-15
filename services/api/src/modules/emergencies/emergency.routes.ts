@@ -1,9 +1,9 @@
 import { Router } from "express";
 
-import { authenticate, authorizeRoles } from "../../middlewares/authenticate";
-import { validateBody } from "../../middlewares/validate";
-import { asyncHandler } from "../../shared/utils/asyncHandler";
-import { emergencyController } from "./emergency.controller";
+import { authenticate, authorizeRoles } from "../../middlewares/authenticate.js";
+import { validateBody } from "../../middlewares/validate.js";
+import { asyncHandler } from "../../shared/utils/asyncHandler.js";
+import { emergencyController } from "./emergency.controller.js";
 import {
   assignAmbulanceSchema,
   assignVolunteerSchema,
@@ -14,7 +14,7 @@ import {
   updateEmergencyDetailsSchema,
   updateEmergencyStatusSchema,
   volunteerResponseSchema
-} from "./emergency.validation";
+} from "./emergency.validation.js";
 
 export const emergencyRoutes = Router();
 

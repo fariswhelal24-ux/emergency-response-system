@@ -1,4 +1,4 @@
-import { db } from "../../database/pool";
+import { db } from "../../database/pool.js";
 
 const STATIC_AMBULANCE_UNIT_CODE = "AMB-BETH-001";
 const STATIC_AMBULANCE_LATITUDE = 31.7054;

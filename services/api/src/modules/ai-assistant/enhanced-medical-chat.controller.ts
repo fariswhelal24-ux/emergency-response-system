@@ -4,9 +4,9 @@
  */
 
 import { Request, Response } from "express";
-import BilinguMedicalAdvisor, { MedicalAdvice } from "../../shared/services/bilingual-medical-advisor";
-import ConversationMemoryService from "../../shared/services/conversation-memory";
-import AIAssistantService from "../../shared/services/ai-assistant";
+import BilinguMedicalAdvisor, { MedicalAdvice } from "../../shared/services/bilingual-medical-advisor.js";
+import ConversationMemoryService from "../../shared/services/conversation-memory.js";
+import AIAssistantService from "../../shared/services/ai-assistant.js";
 
 const triageResponseFields = (advice: MedicalAdvice) => ({
   type: advice.triage.type,

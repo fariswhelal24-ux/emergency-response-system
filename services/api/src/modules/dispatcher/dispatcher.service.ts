@@ -1,14 +1,14 @@
-import { AppError } from "../../shared/errors/AppError";
-import { UserRole } from "../../shared/types/domain";
-import { emergencyService } from "../emergencies/emergency.service";
+import { AppError } from "../../shared/errors/AppError.js";
+import { UserRole } from "../../shared/types/domain.js";
+import { emergencyService } from "../emergencies/emergency.service.js";
 import {
   AssignAmbulanceInput,
   AssignVolunteerInput,
   CloseIncidentInput
-} from "../emergencies/emergency.validation";
-import { locationRepository } from "../locations/location.repository";
-import { dispatcherRepository } from "./dispatcher.repository";
-import { isVolunteerAppConnected } from "../../sockets/volunteerPresence";
+} from "../emergencies/emergency.validation.js";
+import { locationRepository } from "../locations/location.repository.js";
+import { dispatcherRepository } from "./dispatcher.repository.js";
+import { isVolunteerAppConnected } from "../../sockets/volunteerPresence.js";
 
 type AuthContext = {
   userId: string;

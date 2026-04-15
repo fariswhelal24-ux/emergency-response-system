@@ -2,9 +2,9 @@
  * Bilingual medical advice: delegates triage and instructions to OpenAI (medical-triage).
  */
 
-import { detectLanguage } from "./arabic";
-import { correctText } from "./spell-correction";
-import { runMedicalTriage, type MedicalTriagePayload, type TriageChatMessage } from "./medical-triage";
+import { detectLanguage } from "./arabic.js";
+import { correctText } from "./spell-correction.js";
+import { runMedicalTriage, type MedicalTriagePayload, type TriageChatMessage } from "./medical-triage.js";
 
 export interface MedicalContext {
   symptoms: string[];

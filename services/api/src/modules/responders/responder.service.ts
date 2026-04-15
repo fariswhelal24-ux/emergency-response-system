@@ -1,4 +1,4 @@
-import { responderRepository } from "./responder.repository";
+import { responderRepository } from "./responder.repository.js";
 
 export const responderService = {
   listAllResponders: async () => {

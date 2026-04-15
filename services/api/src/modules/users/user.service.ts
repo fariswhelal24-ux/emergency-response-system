@@ -1,6 +1,6 @@
-import { AppError } from "../../shared/errors/AppError";
-import { userRepository } from "./user.repository";
-import { UpdateMedicalProfileInput, UpdateUserProfileInput } from "./user.validation";
+import { AppError } from "../../shared/errors/AppError.js";
+import { userRepository } from "./user.repository.js";
+import { UpdateMedicalProfileInput, UpdateUserProfileInput } from "./user.validation.js";
 
 const toProfileDto = (row: {
   id: string;

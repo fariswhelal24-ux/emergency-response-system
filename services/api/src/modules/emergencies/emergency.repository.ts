@@ -1,13 +1,13 @@
-import { db } from "../../database/pool";
-import { realVolunteerUserConditions } from "../../shared/sql/realVolunteerUser";
+import { db } from "../../database/pool.js";
+import { realVolunteerUserConditions } from "../../shared/sql/realVolunteerUser.js";
 import {
   AmbulanceAssignmentStatus,
   CasePriority,
   CaseStatus,
   UserRole,
   VolunteerAssignmentStatus
-} from "../../shared/types/domain";
-import { EmergencyListQueryInput } from "./emergency.validation";
+} from "../../shared/types/domain.js";
+import { EmergencyListQueryInput } from "./emergency.validation.js";
 
 export type EmergencyCaseRow = {
   id: string;

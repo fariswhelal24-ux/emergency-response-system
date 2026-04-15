@@ -1,7 +1,7 @@
 import { Pool, QueryResult } from "pg";
 import { URL } from "node:url";
 
-import { env } from "../config/env";
+import { env } from "../config/env.js";
 
 let pool = new Pool({
   connectionString: env.databaseUrl

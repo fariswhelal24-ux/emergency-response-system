@@ -1,4 +1,4 @@
-import { AppError } from "../errors/AppError";
+import { AppError } from "../errors/AppError.js";
 
 export const getRequiredRouteParam = (value: string | string[] | undefined, name: string): string => {
   if (typeof value === "string" && value.length > 0) {

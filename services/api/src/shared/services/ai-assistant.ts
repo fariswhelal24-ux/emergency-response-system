@@ -3,7 +3,7 @@ import {
   runMedicalTriage,
   type MedicalTriagePayload,
   type TriageChatMessage
-} from "./medical-triage";
+} from "./medical-triage.js";
 
 export type AssistantChatMessage = TriageChatMessage;
 

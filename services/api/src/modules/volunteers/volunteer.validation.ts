@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { volunteerAvailabilities } from "../../shared/types/domain";
+import { volunteerAvailabilities } from "../../shared/types/domain.js";
 
 export const updateVolunteerProfileSchema = z.object({
   specialty: z.string().trim().min(2).max(120).optional(),

@@ -1,14 +1,14 @@
 import { Request, Response } from "express";
 
-import { AppError } from "../../shared/errors/AppError";
-import { emitVolunteerAvailabilityChanged } from "../../sockets/realtimeServer";
-import { volunteerService } from "./volunteer.service";
+import { AppError } from "../../shared/errors/AppError.js";
+import { emitVolunteerAvailabilityChanged } from "../../sockets/realtimeServer.js";
+import { volunteerService } from "./volunteer.service.js";
 import {
   NearbyVolunteerQueryInput,
   UpdateAvailabilityInput,
   UpdateVolunteerProfileInput,
   nearbyVolunteerQuerySchema
-} from "./volunteer.validation";
+} from "./volunteer.validation.js";
 
 const requireAuthUserId = (request: Request): string => {
   const userId = request.authUser?.userId;

@@ -1,15 +1,15 @@
 import { Router } from "express";
 
-import { authenticate } from "../../middlewares/authenticate";
-import { validateBody } from "../../middlewares/validate";
-import { asyncHandler } from "../../shared/utils/asyncHandler";
-import { authController } from "./auth.controller";
+import { authenticate } from "../../middlewares/authenticate.js";
+import { validateBody } from "../../middlewares/validate.js";
+import { asyncHandler } from "../../shared/utils/asyncHandler.js";
+import { authController } from "./auth.controller.js";
 import {
   loginSchema,
   logoutSchema,
   refreshTokenSchema,
   registerSchema
-} from "./auth.validation";
+} from "./auth.validation.js";
 
 export const authRoutes = Router();
 

@@ -1,18 +1,18 @@
 import { Request, Response } from "express";
 
-import { AppError } from "../../shared/errors/AppError";
+import { AppError } from "../../shared/errors/AppError.js";
 import {
   emitAmbulanceAssigned,
   emitCaseClosed,
   emitVolunteerAssigned
-} from "../../sockets/realtimeServer";
-import { dispatcherService } from "./dispatcher.service";
+} from "../../sockets/realtimeServer.js";
+import { dispatcherService } from "./dispatcher.service.js";
 import {
   AssignAmbulanceInput,
   AssignVolunteerInput,
   CloseIncidentInput
-} from "../emergencies/emergency.validation";
-import { getRequiredRouteParam } from "../../shared/utils/request";
+} from "../emergencies/emergency.validation.js";
+import { getRequiredRouteParam } from "../../shared/utils/request.js";
 
 const getAuth = (request: Request) => {
   if (!request.authUser) {

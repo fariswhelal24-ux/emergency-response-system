@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { locationActors } from "../../shared/types/domain";
+import { locationActors } from "../../shared/types/domain.js";
 
 export const createLocationUpdateSchema = z.object({
   caseId: z.string().uuid().optional(),

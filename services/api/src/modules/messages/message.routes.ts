@@ -1,10 +1,10 @@
 import { Router } from "express";
 
-import { authenticate } from "../../middlewares/authenticate";
-import { validateBody } from "../../middlewares/validate";
-import { asyncHandler } from "../../shared/utils/asyncHandler";
-import { messageController } from "./message.controller";
-import { sendMessageSchema } from "./message.validation";
+import { authenticate } from "../../middlewares/authenticate.js";
+import { validateBody } from "../../middlewares/validate.js";
+import { asyncHandler } from "../../shared/utils/asyncHandler.js";
+import { messageController } from "./message.controller.js";
+import { sendMessageSchema } from "./message.validation.js";
 
 export const messageRoutes = Router();
 

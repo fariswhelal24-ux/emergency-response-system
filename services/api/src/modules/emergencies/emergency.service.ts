@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 
-import { authRepository } from "../auth/auth.repository";
-import { AppError } from "../../shared/errors/AppError";
-import { pushNotificationService } from "../../shared/services/push-notifications";
-import { virtualAmbulanceService } from "../../shared/services/virtual-ambulance";
-import { UserRole } from "../../shared/types/domain";
-import { emitVolunteerAssigned } from "../../sockets/realtimeServer";
-import { findNearestVolunteers } from "../../shared/utils/geo";
-import { hashPassword } from "../../shared/utils/password";
+import { authRepository } from "../auth/auth.repository.js";
+import { AppError } from "../../shared/errors/AppError.js";
+import { pushNotificationService } from "../../shared/services/push-notifications.js";
+import { virtualAmbulanceService } from "../../shared/services/virtual-ambulance.js";
+import { UserRole } from "../../shared/types/domain.js";
+import { emitVolunteerAssigned } from "../../sockets/realtimeServer.js";
+import { findNearestVolunteers } from "../../shared/utils/geo.js";
+import { hashPassword } from "../../shared/utils/password.js";
 import {
   AssignAmbulanceInput,
   AssignVolunteerInput,
@@ -19,14 +19,14 @@ import {
   UpdateEmergencyDetailsInput,
   UpdateEmergencyStatusInput,
   VolunteerResponseInput
-} from "./emergency.validation";
+} from "./emergency.validation.js";
 import {
   AmbulanceAssignmentRow,
   EmergencyCaseRow,
   EmergencyUpdateRow,
   VolunteerAssignmentRow,
   emergencyRepository
-} from "./emergency.repository";
+} from "./emergency.repository.js";
 
 type AuthContext = {
   userId: string;

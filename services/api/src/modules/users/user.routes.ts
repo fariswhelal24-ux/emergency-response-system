@@ -1,10 +1,10 @@
 import { Router } from "express";
 
-import { authenticate } from "../../middlewares/authenticate";
-import { validateBody } from "../../middlewares/validate";
-import { asyncHandler } from "../../shared/utils/asyncHandler";
-import { userController } from "./user.controller";
-import { updateMedicalProfileSchema, updateUserProfileSchema } from "./user.validation";
+import { authenticate } from "../../middlewares/authenticate.js";
+import { validateBody } from "../../middlewares/validate.js";
+import { asyncHandler } from "../../shared/utils/asyncHandler.js";
+import { userController } from "./user.controller.js";
+import { updateMedicalProfileSchema, updateUserProfileSchema } from "./user.validation.js";
 
 export const userRoutes = Router();
 

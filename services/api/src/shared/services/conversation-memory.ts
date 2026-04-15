@@ -1,4 +1,4 @@
-import { pool } from "../../database/pool";
+import { pool } from "../../database/pool.js";
 
 interface ChatMessage {
   id: string;

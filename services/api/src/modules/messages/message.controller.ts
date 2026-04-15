@@ -1,10 +1,10 @@
 import { Request, Response } from "express";
 
-import { AppError } from "../../shared/errors/AppError";
-import { emitMessageCreated } from "../../sockets/realtimeServer";
-import { getRequiredRouteParam } from "../../shared/utils/request";
-import { messageService } from "./message.service";
-import { SendMessageInput } from "./message.validation";
+import { AppError } from "../../shared/errors/AppError.js";
+import { emitMessageCreated } from "../../sockets/realtimeServer.js";
+import { getRequiredRouteParam } from "../../shared/utils/request.js";
+import { messageService } from "./message.service.js";
+import { SendMessageInput } from "./message.validation.js";
 
 const getAuth = (request: Request) => {
   if (!request.authUser) {

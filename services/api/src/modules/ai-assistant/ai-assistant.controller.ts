@@ -7,22 +7,22 @@ import path from "node:path";
 import { Request, Response } from "express";
 import OpenAI from "openai";
 
-import { env } from "../../config/env";
+import { env } from "../../config/env.js";
 import {
   emergencyRepository,
   type EmergencyCaseRow,
   type VolunteerAssignmentRow,
   type VolunteerNearbyRow
-} from "../emergencies/emergency.repository";
-import { emitEmergencyUpdate, emitStatusChanged, emitVolunteerAssigned } from "../../sockets/realtimeServer";
+} from "../emergencies/emergency.repository.js";
+import { emitEmergencyUpdate, emitStatusChanged, emitVolunteerAssigned } from "../../sockets/realtimeServer.js";
 import AIAssistantService, {
   assistantResultFromTriage,
   type AssistantServiceResult
-} from "../../shared/services/ai-assistant";
-import type { AssistantChatMessage } from "../../shared/services/ai-assistant";
-import type { MedicalTriagePayload } from "../../shared/services/medical-triage";
-import ConversationMemoryService from "../../shared/services/conversation-memory";
-import { pushNotificationService } from "../../shared/services/push-notifications";
+} from "../../shared/services/ai-assistant.js";
+import type { AssistantChatMessage } from "../../shared/services/ai-assistant.js";
+import type { MedicalTriagePayload } from "../../shared/services/medical-triage.js";
+import ConversationMemoryService from "../../shared/services/conversation-memory.js";
+import { pushNotificationService } from "../../shared/services/push-notifications.js";
 
 const buildConversationTitle = (message: string): string => {
   const plain = message.trim().replace(/\s+/g, " ");

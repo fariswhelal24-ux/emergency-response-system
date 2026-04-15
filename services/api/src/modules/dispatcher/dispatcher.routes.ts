@@ -1,14 +1,14 @@
 import { Router } from "express";
 
-import { authenticate, authorizeRoles } from "../../middlewares/authenticate";
-import { validateBody } from "../../middlewares/validate";
-import { asyncHandler } from "../../shared/utils/asyncHandler";
-import { dispatcherController } from "./dispatcher.controller";
+import { authenticate, authorizeRoles } from "../../middlewares/authenticate.js";
+import { validateBody } from "../../middlewares/validate.js";
+import { asyncHandler } from "../../shared/utils/asyncHandler.js";
+import { dispatcherController } from "./dispatcher.controller.js";
 import {
   assignAmbulanceSchema,
   assignVolunteerSchema,
   closeIncidentSchema
-} from "../emergencies/emergency.validation";
+} from "../emergencies/emergency.validation.js";
 
 export const dispatcherRoutes = Router();
 

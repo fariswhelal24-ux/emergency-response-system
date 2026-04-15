@@ -3,7 +3,7 @@
  * Uses edit distance and Arabic language rules
  */
 
-import { removeDiacritics } from "./arabic";
+import { removeDiacritics } from "./arabic.js";
 
 // Medical terms dictionary for spell correction
 const MEDICAL_DICTIONARY: { [key: string]: string[] } = {

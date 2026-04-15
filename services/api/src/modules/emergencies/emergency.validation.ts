@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { casePriorities, caseStatuses } from "../../shared/types/domain";
+import { casePriorities, caseStatuses } from "../../shared/types/domain.js";
 
 export const createEmergencySchema = z.object({
   emergencyType: z.string().trim().min(2).max(140),

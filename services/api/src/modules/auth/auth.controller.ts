@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 
-import { AppError } from "../../shared/errors/AppError";
-import { authService } from "./auth.service";
-import { LoginInput, RefreshInput, RegisterInput } from "./auth.validation";
+import { AppError } from "../../shared/errors/AppError.js";
+import { authService } from "./auth.service.js";
+import { LoginInput, RefreshInput, RegisterInput } from "./auth.validation.js";
 
 export const authController = {
   register: async (request: Request, response: Response): Promise<void> => {

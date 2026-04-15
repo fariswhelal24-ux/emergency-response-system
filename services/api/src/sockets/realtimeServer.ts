@@ -3,12 +3,12 @@ import { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
 import { z } from "zod";
 
-import { env } from "../config/env";
-import { locationRepository } from "../modules/locations/location.repository";
-import { LocationActor, locationActors } from "../shared/types/domain";
-import { verifyAccessToken } from "../shared/utils/token";
-import { socketEvents } from "./events";
-import { registerVolunteerSocket, unregisterVolunteerSocket } from "./volunteerPresence";
+import { env } from "../config/env.js";
+import { locationRepository } from "../modules/locations/location.repository.js";
+import { LocationActor, locationActors } from "../shared/types/domain.js";
+import { verifyAccessToken } from "../shared/utils/token.js";
+import { socketEvents } from "./events.js";
+import { registerVolunteerSocket, unregisterVolunteerSocket } from "./volunteerPresence.js";
 
 let io: Server | null = null;
 

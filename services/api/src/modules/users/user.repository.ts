@@ -1,4 +1,4 @@
-import { db } from "../../database/pool";
+import { db } from "../../database/pool.js";
 
 export type UserProfileRow = {
   id: string;

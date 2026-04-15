@@ -2,16 +2,16 @@ import { randomUUID } from "node:crypto";
 
 import jwt from "jsonwebtoken";
 
-import { AppError } from "../../shared/errors/AppError";
-import { comparePassword, hashPassword } from "../../shared/utils/password";
+import { AppError } from "../../shared/errors/AppError.js";
+import { comparePassword, hashPassword } from "../../shared/utils/password.js";
 import {
   signAccessToken,
   signRefreshToken,
   verifyRefreshToken
-} from "../../shared/utils/token";
-import { emitVolunteerAvailabilityChanged } from "../../sockets/realtimeServer";
-import { authRepository, UserRecord, UserRole } from "./auth.repository";
-import { LoginInput, RegisterInput } from "./auth.validation";
+} from "../../shared/utils/token.js";
+import { emitVolunteerAvailabilityChanged } from "../../sockets/realtimeServer.js";
+import { authRepository, UserRecord, UserRole } from "./auth.repository.js";
+import { LoginInput, RegisterInput } from "./auth.validation.js";
 
 type PublicUser = {
   id: string;

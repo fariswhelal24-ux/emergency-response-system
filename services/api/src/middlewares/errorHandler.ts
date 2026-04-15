@@ -1,8 +1,8 @@
 import { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 
-import { env } from "../config/env";
-import { AppError } from "../shared/errors/AppError";
+import { env } from "../config/env.js";
+import { AppError } from "../shared/errors/AppError.js";
 
 export const errorHandler = (
   error: unknown,

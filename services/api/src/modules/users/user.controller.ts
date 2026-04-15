@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 
-import { AppError } from "../../shared/errors/AppError";
-import { userService } from "./user.service";
-import { UpdateMedicalProfileInput, UpdateUserProfileInput } from "./user.validation";
+import { AppError } from "../../shared/errors/AppError.js";
+import { userService } from "./user.service.js";
+import { UpdateMedicalProfileInput, UpdateUserProfileInput } from "./user.validation.js";
 
 const requireAuthUserId = (request: Request): string => {
   const userId = request.authUser?.userId;

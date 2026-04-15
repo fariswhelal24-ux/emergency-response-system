@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { messageTypes } from "../../shared/types/domain";
+import { messageTypes } from "../../shared/types/domain.js";
 
 export const sendMessageSchema = z.object({
   caseId: z.string().uuid(),

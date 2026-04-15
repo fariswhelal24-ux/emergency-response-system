@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 
-import { AppError } from "../../shared/errors/AppError";
+import { AppError } from "../../shared/errors/AppError.js";
 import {
   emitAmbulanceAssigned,
   emitCallStarted,
@@ -10,8 +10,8 @@ import {
   emitStatusChanged,
   emitVolunteerAssigned,
   emitVolunteerResponse
-} from "../../sockets/realtimeServer";
-import { emergencyService } from "./emergency.service";
+} from "../../sockets/realtimeServer.js";
+import { emergencyService } from "./emergency.service.js";
 import {
   AssignAmbulanceInput,
   AssignVolunteerInput,
@@ -24,8 +24,8 @@ import {
   UpdateEmergencyStatusInput,
   VolunteerResponseInput,
   emergencyListQuerySchema
-} from "./emergency.validation";
-import { getRequiredRouteParam } from "../../shared/utils/request";
+} from "./emergency.validation.js";
+import { getRequiredRouteParam } from "../../shared/utils/request.js";
 
 const getAuthContext = (request: Request) => {
   if (!request.authUser) {

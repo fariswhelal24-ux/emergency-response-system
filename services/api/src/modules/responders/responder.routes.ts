@@ -1,8 +1,8 @@
 import { Router } from "express";
 
-import { authenticate, authorizeRoles } from "../../middlewares/authenticate";
-import { asyncHandler } from "../../shared/utils/asyncHandler";
-import { responderController } from "./responder.controller";
+import { authenticate, authorizeRoles } from "../../middlewares/authenticate.js";
+import { asyncHandler } from "../../shared/utils/asyncHandler.js";
+import { responderController } from "./responder.controller.js";
 
 export const responderRoutes = Router();
 

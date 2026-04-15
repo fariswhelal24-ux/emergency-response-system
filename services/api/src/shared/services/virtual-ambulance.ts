@@ -1,6 +1,6 @@
-import { locationRepository } from "../../modules/locations/location.repository";
-import { emitAmbulanceUpdate, emitLocationUpdated, emitStatusChanged } from "../../sockets/realtimeServer";
-import { GeoPoint, buildLinearRoute, getDistance } from "../utils/geo";
+import { locationRepository } from "../../modules/locations/location.repository.js";
+import { emitAmbulanceUpdate, emitLocationUpdated, emitStatusChanged } from "../../sockets/realtimeServer.js";
+import { GeoPoint, buildLinearRoute, getDistance } from "../utils/geo.js";
 
 type VirtualAmbulanceStatus = "moving" | "arrived";
 

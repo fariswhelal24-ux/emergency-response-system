@@ -1,12 +1,12 @@
-import { AppError } from "../../shared/errors/AppError";
-import { LocationActor, UserRole } from "../../shared/types/domain";
-import { emergencyRepository } from "../emergencies/emergency.repository";
+import { AppError } from "../../shared/errors/AppError.js";
+import { LocationActor, UserRole } from "../../shared/types/domain.js";
+import { emergencyRepository } from "../emergencies/emergency.repository.js";
 import {
   CreateLocationUpdateInput,
   NearbyQueryInput,
   NearestAmbulanceQueryInput
-} from "./location.validation";
-import { locationRepository } from "./location.repository";
+} from "./location.validation.js";
+import { locationRepository } from "./location.repository.js";
 
 type AuthContext = {
   userId: string;

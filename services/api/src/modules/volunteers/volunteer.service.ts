@@ -1,10 +1,10 @@
-import { AppError } from "../../shared/errors/AppError";
+import { AppError } from "../../shared/errors/AppError.js";
 import {
   NearbyVolunteerQueryInput,
   UpdateAvailabilityInput,
   UpdateVolunteerProfileInput
-} from "./volunteer.validation";
-import { volunteerRepository } from "./volunteer.repository";
+} from "./volunteer.validation.js";
+import { volunteerRepository } from "./volunteer.repository.js";
 
 const toProfileDto = (row: {
   id: string;

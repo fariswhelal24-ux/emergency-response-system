@@ -1,8 +1,8 @@
 import { NextFunction, Request, Response } from "express";
 
-import { AppError } from "../shared/errors/AppError";
-import { UserRole } from "../shared/types/domain";
-import { verifyAccessToken } from "../shared/utils/token";
+import { AppError } from "../shared/errors/AppError.js";
+import { UserRole } from "../shared/types/domain.js";
+import { verifyAccessToken } from "../shared/utils/token.js";
 
 export const authenticate = (request: Request, _response: Response, next: NextFunction): void => {
   const header = request.headers.authorization;

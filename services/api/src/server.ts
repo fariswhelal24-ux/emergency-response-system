@@ -1,9 +1,9 @@
 import { createServer } from "node:http";
 
-import { app } from "./app";
-import { db } from "./database/pool";
-import { systemBootstrapService } from "./shared/services/system-bootstrap";
-import { attachRealtimeServer } from "./sockets/realtimeServer";
+import { app } from "./app.js";
+import { db } from "./database/pool.js";
+import { systemBootstrapService } from "./shared/services/system-bootstrap.js";
+import { attachRealtimeServer } from "./sockets/realtimeServer.js";
 
 const server = createServer(app);
 

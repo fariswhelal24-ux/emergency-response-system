@@ -1,16 +1,16 @@
 import { Request, Response } from "express";
 
-import { AppError } from "../../shared/errors/AppError";
-import { emitLocationUpdated } from "../../sockets/realtimeServer";
-import { getRequiredRouteParam } from "../../shared/utils/request";
-import { locationService } from "./location.service";
+import { AppError } from "../../shared/errors/AppError.js";
+import { emitLocationUpdated } from "../../sockets/realtimeServer.js";
+import { getRequiredRouteParam } from "../../shared/utils/request.js";
+import { locationService } from "./location.service.js";
 import {
   CreateLocationUpdateInput,
   NearbyQueryInput,
   NearestAmbulanceQueryInput,
   nearbyQuerySchema,
   nearestAmbulanceQuerySchema
-} from "./location.validation";
+} from "./location.validation.js";
 
 const getAuth = (request: Request) => {
   if (!request.authUser) {

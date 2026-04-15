@@ -4,8 +4,8 @@
  */
 
 import { Router, Request, Response } from "express";
-import { authenticate } from "../../middlewares/authenticate";
-import { enhancedMedicalChatController } from "./enhanced-medical-chat.controller";
+import { authenticate } from "../../middlewares/authenticate.js";
+import { enhancedMedicalChatController } from "./enhanced-medical-chat.controller.js";
 
 export const medicalAdviceRoutes = Router();
 

@@ -1,5 +1,5 @@
-import { db } from "../../database/pool";
-import { UserRole } from "../../shared/types/domain";
+import { db } from "../../database/pool.js";
+import { UserRole } from "../../shared/types/domain.js";
 
 export type UserRecord = {
   id: string;

@@ -1,6 +1,6 @@
-import { db } from "../../database/pool";
+import { db } from "../../database/pool.js";
 
-import { MessageType } from "../../shared/types/domain";
+import { MessageType } from "../../shared/types/domain.js";
 
 export type MessageRow = {
   id: string;

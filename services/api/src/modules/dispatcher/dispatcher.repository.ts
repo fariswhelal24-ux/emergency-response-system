@@ -1,5 +1,5 @@
-import { db } from "../../database/pool";
-import { realVolunteerUserConditions } from "../../shared/sql/realVolunteerUser";
+import { db } from "../../database/pool.js";
+import { realVolunteerUserConditions } from "../../shared/sql/realVolunteerUser.js";
 
 export type DashboardStatsRow = {
   active_cases: string;

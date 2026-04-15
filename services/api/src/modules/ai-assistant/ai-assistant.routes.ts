@@ -1,7 +1,7 @@
 import { Request, Response, Router } from "express";
 
-import { authenticate } from "../../middlewares/authenticate";
-import { aiAssistantController } from "./ai-assistant.controller";
+import { authenticate } from "../../middlewares/authenticate.js";
+import { aiAssistantController } from "./ai-assistant.controller.js";
 
 export const aiRoutes = Router();
 

@@ -1,8 +1,8 @@
-import { AppError } from "../../shared/errors/AppError";
-import { UserRole } from "../../shared/types/domain";
-import { emergencyRepository } from "../emergencies/emergency.repository";
-import { messageRepository } from "./message.repository";
-import { SendMessageInput } from "./message.validation";
+import { AppError } from "../../shared/errors/AppError.js";
+import { UserRole } from "../../shared/types/domain.js";
+import { emergencyRepository } from "../emergencies/emergency.repository.js";
+import { messageRepository } from "./message.repository.js";
+import { SendMessageInput } from "./message.validation.js";
 
 type AuthContext = {
   userId: string;
