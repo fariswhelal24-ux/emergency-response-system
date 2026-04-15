@@ -169,6 +169,8 @@ export const AlertsScreen = ({
     patientSummary: string;
     urgencyLabel: string;
     safeAccess: string;
+    /** Caller / dispatcher has not finished entering case details yet. */
+    callerDetailsPending?: boolean;
   };
   hasActiveEmergency: boolean;
   onToggleAvailability: () => void;
@@ -178,8 +180,13 @@ export const AlertsScreen = ({
   onCallAnotherVolunteer: () => void;
   onOpenMedicalChat: () => void;
 }) => {
-  const emergencyTypeArabic = formatEmergencyTypeArabic(emergency.emergencyType);
-  const patientSummaryArabic = formatPatientSummaryArabic(emergency.patientSummary);
+  const detailsPending = emergency.callerDetailsPending === true;
+  const emergencyTypeArabic = detailsPending
+    ? "حالة طارئة — بانتظار التفاصيل"
+    : formatEmergencyTypeArabic(emergency.emergencyType);
+  const patientSummaryArabic = detailsPending
+    ? "تم إشعارك فور بدء مكالمة الإسعاف. تفاصيل الحالة الطبية ستظهر هنا بمجرد إدخالها من المتصل أو مركز التوجيه. يمكنك الرفض الآن، أو الانتظار ثم القبول بعد التحديث."
+    : formatPatientSummaryArabic(emergency.patientSummary);
   const accessArabic = formatAccessArabic(emergency.safeAccess);
   const urgencyArabic = formatUrgencyArabic(emergency.urgencyLabel);
 
@@ -228,8 +235,19 @@ export const AlertsScreen = ({
               </View>
 
               <View style={styles.actionsRow}>
-                <Pressable onPress={onEmergencyCall} style={styles.acceptButton}>
-                  <Text style={styles.acceptText}>قبول الحالة</Text>
+                <Pressable
+                  onPress={() => {
+                    if (detailsPending) {
+                      return;
+                    }
+                    onEmergencyCall();
+                  }}
+                  style={[styles.acceptButton, detailsPending && styles.acceptButtonDisabled]}
+                  disabled={detailsPending}
+                >
+                  <Text style={[styles.acceptText, detailsPending && styles.acceptTextDisabled]}>
+                    {detailsPending ? "انتظر تفاصيل الحالة" : "قبول الحالة"}
+                  </Text>
                 </Pressable>
                 <Pressable onPress={onRejectEmergencyCall} style={styles.rejectButton}>
                   <Text style={styles.rejectText}>رفض</Text>
@@ -247,13 +265,28 @@ export const AlertsScreen = ({
           </View>
         )}
 
-        <Pressable onPress={onEmergencyCall} style={styles.callButton}>
+        <Pressable
+          onPress={() => {
+            if (hasActiveEmergency && detailsPending) {
+              return;
+            }
+            onEmergencyCall();
+          }}
+          style={[styles.callButton, hasActiveEmergency && detailsPending && styles.callButtonDisabled]}
+          disabled={hasActiveEmergency && detailsPending}
+        >
           <Text style={styles.callButtonTitle}>
-            {hasActiveEmergency ? "Call Ambulance" : "Start New Ambulance Call"}
+            {hasActiveEmergency
+              ? detailsPending
+                ? "بانتظار تفاصيل الحالة"
+                : "Call Ambulance"
+              : "Start New Ambulance Call"}
           </Text>
           <Text style={styles.callButtonSub}>
             {hasActiveEmergency
-              ? "Immediate medical dispatch for this case"
+              ? detailsPending
+                ? "لا يمكن إكمال القبول حتى تصل التفاصيل من المتصل"
+                : "Immediate medical dispatch for this case"
               : "Create a new emergency case and dispatch ambulance now"}
           </Text>
         </Pressable>
@@ -449,6 +482,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 14
   },
+  acceptButtonDisabled: {
+    backgroundColor: "#B8CAE8"
+  },
+  acceptTextDisabled: {
+    color: "#F4F7FD"
+  },
   rejectButton: {
     flex: 1,
     borderRadius: radius.round,
@@ -470,6 +509,9 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     paddingVertical: 14,
     paddingHorizontal: 16
+  },
+  callButtonDisabled: {
+    backgroundColor: "#9AA9BD"
   },
   callButtonTitle: {
     color: "#FFFFFF",

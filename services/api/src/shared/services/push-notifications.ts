@@ -10,6 +10,10 @@ type EmergencyPushPayload = {
   severity: string;
   summary?: string;
   language?: "ar" | "en";
+  /** True on first ping from voice call before dispatcher/caller enriches the case. */
+  detailsPending?: boolean;
+  /** True on second ping after case details were saved. */
+  detailsUpdated?: boolean;
 };
 
 type VolunteerPushTarget = {
@@ -44,11 +48,34 @@ export const pushNotificationService = {
     }
 
     const language = detectNotificationLanguage(input.payload);
-    const title = language === "ar" ? "تنبيه طارئ" : "Emergency Alert";
-    const body =
+    const title =
       language === "ar"
+        ? input.payload.detailsPending
+          ? "بلاغ طارئ"
+          : input.payload.detailsUpdated
+            ? "تحديث حالة طارئة"
+            : "تنبيه طارئ"
+        : input.payload.detailsPending
+          ? "Emergency alert"
+          : input.payload.detailsUpdated
+            ? "Case updated"
+            : "Emergency Alert";
+
+    const body = (() => {
+      if (input.payload.detailsPending) {
+        return language === "ar"
+          ? "مكالمة إسعاف — بانتظار تفاصيل الحالة. يمكنك الرفض الآن أو الانتظار للقبول بعد التحديث."
+          : "Ambulance call — case details pending. You may decline now or wait to accept after details arrive.";
+      }
+      if (input.payload.detailsUpdated) {
+        return language === "ar"
+          ? "تم إدخال تفاصيل الحالة — يمكنك القبول أو الرفض."
+          : "Case details are in — you can accept or decline.";
+      }
+      return language === "ar"
         ? `${input.payload.type} (${input.payload.severity}) بالقرب منك`
         : `${input.payload.type} (${input.payload.severity}) nearby`;
+    })();
 
     const message = {
       registration_ids: cleanTargets.map((target) => target.pushToken),
@@ -58,7 +85,9 @@ export const pushNotificationService = {
         location: input.payload.location,
         type: input.payload.type,
         severity: input.payload.severity,
-        language
+        language,
+        ...(input.payload.detailsPending ? { detailsPending: "1" } : {}),
+        ...(input.payload.detailsUpdated ? { detailsUpdated: "1" } : {})
       },
       notification: {
         title,

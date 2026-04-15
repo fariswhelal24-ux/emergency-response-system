@@ -11,6 +11,7 @@ import {
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { LiveTrackingMap } from "../components/LiveTrackingMap";
 import { colors, radius, spacing } from "../theme/tokens";
 
 const dispatchedData = {
@@ -41,32 +42,6 @@ const dispatchedData = {
   ]
 };
 
-const mapRoads = [
-  { top: 30, left: -16, width: 176, rotate: "10deg" },
-  { top: 74, right: -30, width: 188, rotate: "-14deg" },
-  { top: 140, left: 12, width: 236, rotate: "8deg" },
-  { top: 208, right: -22, width: 194, rotate: "-10deg" }
-];
-
-const mapStreets = [
-  { top: 18, left: 36, height: 210 },
-  { top: 0, left: 106, height: 244 },
-  { top: 12, left: 188, height: 204 },
-  { top: 32, left: 254, height: 176 }
-];
-
-const defaultRouteDots = Array.from({ length: 11 }, (_, index) => ({
-  left: 240 - index * 18,
-  top: 56 + index * 14
-}));
-
-const mapBlocks = [
-  { top: 22, left: 22, width: 56, height: 40 },
-  { top: 44, left: 142, width: 70, height: 52 },
-  { top: 112, left: 36, width: 84, height: 58 },
-  { top: 156, left: 186, width: 92, height: 50 }
-];
-
 const cardShadow = {
   shadowColor: "#153250",
   shadowOffset: {
@@ -90,23 +65,6 @@ type CitizenLiveTrackingState = {
   citizenLocation?: LiveCoordinate;
   ambulanceRoute?: LiveCoordinate[];
   syncState: "connecting" | "connected" | "offline";
-};
-
-const mapDotFromCoordinate = (coordinate: LiveCoordinate): { left: number; top: number } => {
-  const minLat = 31.87;
-  const maxLat = 31.95;
-  const minLng = 35.15;
-  const maxLng = 35.25;
-  const width = 294;
-  const height = 278;
-
-  const xRatio = (coordinate.longitude - minLng) / (maxLng - minLng);
-  const yRatio = 1 - (coordinate.latitude - minLat) / (maxLat - minLat);
-
-  return {
-    left: Math.max(16, Math.min(width - 16, Math.round(xRatio * width))),
-    top: Math.max(16, Math.min(height - 16, Math.round(yRatio * height)))
-  };
 };
 
 const AvatarBubble = ({
@@ -177,49 +135,6 @@ export const AmbulanceDispatchedScreen = ({
     return selectedChip ?? updateText.trim();
   }, [selectedChip, updateText]);
 
-  const projectedCitizen = useMemo(() => {
-    return liveTracking.citizenLocation ? mapDotFromCoordinate(liveTracking.citizenLocation) : { left: 108, top: 176 };
-  }, [liveTracking.citizenLocation]);
-
-  const projectedAmbulance = useMemo(() => {
-    return liveTracking.ambulanceLocation ? mapDotFromCoordinate(liveTracking.ambulanceLocation) : { left: 228, top: 68 };
-  }, [liveTracking.ambulanceLocation]);
-
-  const projectedVolunteer = useMemo(() => {
-    return liveTracking.volunteerLocation ? mapDotFromCoordinate(liveTracking.volunteerLocation) : { left: 246, top: 40 };
-  }, [liveTracking.volunteerLocation]);
-
-  const routeDots = useMemo(() => {
-    if (liveTracking.ambulanceRoute && liveTracking.ambulanceRoute.length > 1) {
-      return liveTracking.ambulanceRoute.slice(0, 18).map((point) => mapDotFromCoordinate(point));
-    }
-
-    return defaultRouteDots;
-  }, [liveTracking.ambulanceRoute]);
-
-  const volunteerRouteDots = useMemo(() => {
-    if (!liveTracking.volunteerLocation || !liveTracking.citizenLocation) {
-      return [];
-    }
-
-    const points: Array<{ left: number; top: number }> = [];
-    const steps = 10;
-    for (let index = 0; index <= steps; index += 1) {
-      const ratio = index / steps;
-      const point = {
-        latitude:
-          liveTracking.volunteerLocation.latitude +
-          (liveTracking.citizenLocation.latitude - liveTracking.volunteerLocation.latitude) * ratio,
-        longitude:
-          liveTracking.volunteerLocation.longitude +
-          (liveTracking.citizenLocation.longitude - liveTracking.volunteerLocation.longitude) * ratio
-      };
-      points.push(mapDotFromCoordinate(point));
-    }
-
-    return points;
-  }, [liveTracking.citizenLocation, liveTracking.volunteerLocation]);
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.bgTextureTop} />
@@ -270,131 +185,12 @@ export const AmbulanceDispatchedScreen = ({
             </View>
           </View>
 
-          <View style={styles.mapCanvas}>
-            {mapBlocks.map((block, index) => (
-              <View
-                key={`block-${index}`}
-                style={[
-                  styles.mapBlock,
-                  {
-                    top: block.top,
-                    left: block.left,
-                    width: block.width,
-                    height: block.height
-                  }
-                ]}
-              />
-            ))}
-
-            {mapRoads.map((road, index) => (
-              <View
-                key={`road-${index}`}
-                style={[
-                  styles.mapRoad,
-                  {
-                    top: road.top,
-                    left: road.left,
-                    right: road.right,
-                    width: road.width,
-                    transform: [{ rotate: road.rotate }]
-                  }
-                ]}
-              />
-            ))}
-
-            {mapStreets.map((street, index) => (
-              <View
-                key={`street-${index}`}
-                style={[
-                  styles.mapStreet,
-                  {
-                    top: street.top,
-                    left: street.left,
-                    height: street.height
-                  }
-                ]}
-              />
-            ))}
-
-            <View
-              style={[
-                styles.endpointMarker,
-                {
-                  left: projectedVolunteer.left + 6,
-                  top: projectedVolunteer.top + 2
-                }
-              ]}
-            />
-
-            {routeDots.map((dot, index) => (
-              <View
-                key={`dot-${index}`}
-                style={[
-                  styles.routeDot,
-                  {
-                    left: dot.left,
-                    top: dot.top
-                  }
-                ]}
-              />
-            ))}
-
-            {volunteerRouteDots.map((dot, index) => (
-              <View
-                key={`vol-dot-${index}`}
-                style={[
-                  styles.volunteerRouteDot,
-                  {
-                    left: dot.left,
-                    top: dot.top
-                  }
-                ]}
-              />
-            ))}
-
-            <View
-              style={[
-                styles.ambulanceBadge,
-                {
-                  left: projectedAmbulance.left,
-                  top: projectedAmbulance.top
-                }
-              ]}
-            >
-              <MaterialCommunityIcons name="ambulance" size={22} color="#C92233" />
-            </View>
-
-            <View
-              style={[
-                styles.patientPulseOuter,
-                {
-                  left: projectedCitizen.left - 48,
-                  top: projectedCitizen.top - 44
-                }
-              ]}
-            />
-            <View
-              style={[
-                styles.patientPulseInner,
-                {
-                  left: projectedCitizen.left - 28,
-                  top: projectedCitizen.top - 24
-                }
-              ]}
-            />
-            <View
-              style={[
-                styles.patientPinWrap,
-                {
-                  left: projectedCitizen.left - 20,
-                  top: projectedCitizen.top - 36
-                }
-              ]}
-            >
-              <MaterialCommunityIcons name="map-marker" size={36} color="#DA2338" />
-              <View style={styles.patientPinCenter} />
-            </View>
-          </View>
+          <LiveTrackingMap
+            patientLocation={liveTracking.citizenLocation}
+            volunteerLocation={liveTracking.volunteerLocation}
+            ambulanceLocation={liveTracking.ambulanceLocation}
+            ambulanceRoute={liveTracking.ambulanceRoute}
+          />
         </CardSurface>
 
         <CardSurface style={styles.etaCard}>

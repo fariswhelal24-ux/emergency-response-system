@@ -80,6 +80,7 @@ type VolunteerSocketEmergency = {
   voiceDescription: string | null;
   transcriptionText: string | null;
   aiAnalysis: string | null;
+  callerDetailsPending?: boolean;
   location: CaseCoordinate;
 };
 
@@ -148,6 +149,7 @@ const toVolunteerEmergencyFromSocket = (payload: unknown): VolunteerSocketEmerge
     voiceDescription: toText(casePayload.voiceDescription),
     transcriptionText: toText(casePayload.transcriptionText),
     aiAnalysis: toText(casePayload.aiAnalysis),
+    callerDetailsPending: casePayload.callerDetailsPending === true,
     location: {
       latitude,
       longitude
@@ -284,6 +286,7 @@ type VolunteerEmergencyState = {
   patientSummary: string;
   urgencyLabel: string;
   safeAccess: string;
+  callerDetailsPending: boolean;
 };
 
 const defaultVolunteerEmergencyState: VolunteerEmergencyState = {
@@ -295,7 +298,8 @@ const defaultVolunteerEmergencyState: VolunteerEmergencyState = {
   ambulanceDispatched: false,
   patientSummary: "No active emergency yet.",
   urgencyLabel: "HIGH urgency",
-  safeAccess: "Live caller location"
+  safeAccess: "Live caller location",
+  callerDetailsPending: false
 };
 
 const defaultCitizenCaseSnapshot: CitizenCaseSnapshot = {
@@ -333,6 +337,8 @@ export default function App() {
   const [volunteerCaseVersion, setVolunteerCaseVersion] = useState(0);
   const [volunteerHasActiveEmergency, setVolunteerHasActiveEmergency] = useState(false);
   const [volunteerCaseLocation, setVolunteerCaseLocation] = useState<CaseCoordinate | null>(null);
+  const [volunteerAmbulanceLocation, setVolunteerAmbulanceLocation] = useState<CaseCoordinate | null>(null);
+  const [volunteerLiveLocation, setVolunteerLiveLocation] = useState<CaseCoordinate | null>(null);
   const [volunteerEmergencyState, setVolunteerEmergencyState] = useState<VolunteerEmergencyState>(
     defaultVolunteerEmergencyState
   );
@@ -346,6 +352,7 @@ export default function App() {
     }>
   >([]);
   const lastSyncedVolunteerCaseIdRef = useRef<string>("");
+  const lastVolunteerCallerDetailsPendingRef = useRef(false);
   const volunteerSocketRef = useRef<Socket | null>(null);
   const volunteerPositionRef = useRef<CaseCoordinate | null>(null);
   const citizenLocationRef = useRef<CaseCoordinate>(DEFAULT_BETHLEHEM_LOCATION);
@@ -365,15 +372,19 @@ export default function App() {
     useState<VolunteerEditableProfile>(defaultVolunteerProfile);
 
   const applyVolunteerEmergencyState = useCallback((incoming: VolunteerIncomingEmergency) => {
-    const summary =
-      incoming.voiceDescription ||
-      incoming.aiAnalysis ||
-      incoming.transcriptionText ||
-      "Emergency case requires immediate medical response.";
+    const pending = incoming.callerDetailsPending === true;
+    const summary = pending
+      ? ""
+      : incoming.voiceDescription ||
+        incoming.aiAnalysis ||
+        incoming.transcriptionText ||
+        "Emergency case requires immediate medical response.";
     const volunteerEta = incoming.volunteerEtaMinutes ?? 5;
     const estimatedDistanceKm = Math.max(0.5, Number(((volunteerEta * 35) / 60).toFixed(1)));
     const urgencyLabel = `${incoming.priority} urgency`;
     const isNewCase = lastSyncedVolunteerCaseIdRef.current !== incoming.id;
+    const sameCase = lastSyncedVolunteerCaseIdRef.current === incoming.id;
+    const wasPending = lastVolunteerCallerDetailsPendingRef.current;
 
     setVolunteerEmergencyState({
       caseId: incoming.id,
@@ -384,7 +395,8 @@ export default function App() {
       ambulanceDispatched: true,
       patientSummary: summary,
       urgencyLabel,
-      safeAccess: incoming.address
+      safeAccess: incoming.address,
+      callerDetailsPending: pending
     });
     setVolunteerCaseLocation({
       latitude: incoming.location.latitude,
@@ -395,9 +407,16 @@ export default function App() {
     setVolunteerTab("alerts");
     setVolunteerFlow("incoming");
     if (isNewCase) {
-      setVolunteerBanner(`New emergency alert: ${incoming.emergencyType}`);
+      setVolunteerBanner(
+        pending
+          ? "بلاغ طارئ: مكالمة إسعاف — بانتظار تفاصيل الحالة من المتصل."
+          : `New emergency alert: ${incoming.emergencyType}`
+      );
+    } else if (sameCase && wasPending && !pending) {
+      setVolunteerBanner("تم تحديث تفاصيل الحالة — يمكنك الآن القبول أو الرفض.");
     }
     lastSyncedVolunteerCaseIdRef.current = incoming.id;
+    lastVolunteerCallerDetailsPendingRef.current = pending;
   }, []);
 
   const setPendingAfterCall = (value: boolean) => {
@@ -1134,7 +1153,9 @@ export default function App() {
         }
         setVolunteerHasActiveEmergency(false);
         setVolunteerEmergencyState(defaultVolunteerEmergencyState);
+        setVolunteerAmbulanceLocation(null);
         lastSyncedVolunteerCaseIdRef.current = "";
+        lastVolunteerCallerDetailsPendingRef.current = false;
         return;
       }
       applyVolunteerEmergencyState(incoming);
@@ -1240,7 +1261,9 @@ export default function App() {
         }
         setVolunteerHasActiveEmergency(false);
         setVolunteerEmergencyState(defaultVolunteerEmergencyState);
+        setVolunteerAmbulanceLocation(null);
         lastSyncedVolunteerCaseIdRef.current = "";
+        lastVolunteerCallerDetailsPendingRef.current = false;
         return;
       }
 
@@ -1285,9 +1308,22 @@ export default function App() {
 
         socket.on(
           "ambulance_update",
-          (payload: { caseId?: string; ambulance?: { etaMinutes?: number; status?: string } }) => {
+          (payload: {
+            caseId?: string;
+            ambulance?: { etaMinutes?: number; status?: string; latitude?: number; longitude?: number };
+          }) => {
             if (payload?.caseId !== volunteerEmergencyState.caseId || !payload.ambulance) {
               return;
+            }
+
+            if (
+              typeof payload.ambulance.latitude === "number" &&
+              typeof payload.ambulance.longitude === "number"
+            ) {
+              setVolunteerAmbulanceLocation({
+                latitude: payload.ambulance.latitude,
+                longitude: payload.ambulance.longitude
+              });
             }
 
             if (payload.ambulance.status === "arrived") {
@@ -1362,6 +1398,7 @@ export default function App() {
 
         volunteerDeviceLocationRef.current = initial;
         volunteerPositionRef.current = initial;
+        setVolunteerLiveLocation(initial);
 
         watcher = await Location.watchPositionAsync(
           {
@@ -1377,6 +1414,7 @@ export default function App() {
 
             volunteerDeviceLocationRef.current = next;
             volunteerPositionRef.current = next;
+            setVolunteerLiveLocation(next);
 
             const caseId =
               (volunteerFlow === "accepted" || volunteerFlow === "inProgress") &&
@@ -1999,6 +2037,10 @@ export default function App() {
                 if (!volunteerEmergencyState.caseId) {
                   throw new Error("No active emergency case to accept.");
                 }
+                if (volunteerEmergencyState.callerDetailsPending) {
+                  setVolunteerBanner("لا يمكن قبول الحالة قبل وصول تفاصيل من المتصل أو مركز التوجيه.");
+                  return;
+                }
                 await respondVolunteerToAlert(volunteerEmergencyState.caseId, true);
                 setVolunteerHasActiveEmergency(true);
                 setVolunteerFlow("accepted");
@@ -2037,7 +2079,8 @@ export default function App() {
                   caseData?.aiAnalysis ||
                   "Emergency case created by volunteer. Ambulance dispatch is active.",
                 urgencyLabel: `${caseData?.priority ?? "CRITICAL"} urgency`,
-                safeAccess: caseData?.address || "Live caller location"
+                safeAccess: caseData?.address || "Live caller location",
+                callerDetailsPending: Boolean(caseData?.callerDetailsPending)
               });
 
               if (
@@ -2071,8 +2114,10 @@ export default function App() {
             }
             await respondVolunteerToAlert(volunteerEmergencyState.caseId, false);
             lastSyncedVolunteerCaseIdRef.current = "";
+            lastVolunteerCallerDetailsPendingRef.current = false;
             setVolunteerHasActiveEmergency(false);
             setVolunteerEmergencyState(defaultVolunteerEmergencyState);
+            setVolunteerAmbulanceLocation(null);
             setVolunteerBanner("Emergency request declined. Another nearby volunteer will be alerted.");
           }}
           onCallAnotherVolunteer={() => {
@@ -2092,7 +2137,12 @@ export default function App() {
     if (volunteerFlow === "accepted") {
       return (
         <VolunteerAcceptedScreen
-          emergency={volunteerEmergencyState}
+          emergency={{
+            ...volunteerEmergencyState,
+            patientLocation: volunteerCaseLocation ?? undefined,
+            volunteerLocation: volunteerLiveLocation ?? volunteerDeviceLocationRef.current ?? undefined,
+            ambulanceLocation: volunteerAmbulanceLocation ?? undefined
+          }}
           onStartProgress={() => {
             setVolunteerFlow("inProgress");
             setVolunteerBanner("Response in progress. Keep dispatcher informed.");
@@ -2113,6 +2163,9 @@ export default function App() {
     volunteerAvailable,
     volunteerCaseVersion,
     volunteerHasActiveEmergency,
+    volunteerCaseLocation,
+    volunteerLiveLocation,
+    volunteerAmbulanceLocation,
     volunteerProfileState,
     handleVolunteerProfileSave,
     volunteerEmergencyState,

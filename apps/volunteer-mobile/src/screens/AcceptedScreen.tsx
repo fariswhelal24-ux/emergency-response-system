@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 
+import { IncidentMap } from "../components/IncidentMap";
 import { Card, GhostButton, PrimaryButton, ScreenShell, SectionTitle } from "../components/Ui";
 import { colors, radius, spacing } from "../theme/tokens";
 
@@ -15,6 +16,9 @@ export const AcceptedScreen = ({
     ambulanceDispatched: boolean;
     patientSummary: string;
     safeAccess: string;
+    patientLocation?: { latitude: number; longitude: number };
+    volunteerLocation?: { latitude: number; longitude: number };
+    ambulanceLocation?: { latitude: number; longitude: number };
   };
   onStartProgress: () => void;
 }) => {
@@ -27,6 +31,13 @@ export const AcceptedScreen = ({
         <Card style={styles.mapCard}>
           <Text style={styles.mapTitle}>Navigation Route Active</Text>
           <Text style={styles.mapMeta}>Patient location pinned • Ambulance en route</Text>
+          <View style={styles.mapWrap}>
+            <IncidentMap
+              patientLocation={emergency.patientLocation}
+              volunteerLocation={emergency.volunteerLocation}
+              ambulanceLocation={emergency.ambulanceLocation}
+            />
+          </View>
         </Card>
 
         <Card style={styles.summaryCard}>
@@ -83,6 +94,9 @@ const styles = StyleSheet.create({
   mapMeta: {
     color: colors.inkMuted,
     marginTop: 4
+  },
+  mapWrap: {
+    marginTop: spacing.md
   },
   summaryCard: {
     marginBottom: spacing.md

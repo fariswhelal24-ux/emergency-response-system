@@ -27,6 +27,7 @@ export type EmergencyCaseRow = {
   eta_minutes: number | null;
   ambulance_eta_minutes: number | null;
   volunteer_eta_minutes: number | null;
+  caller_details_pending?: boolean;
   started_at: Date;
   closed_at: Date | null;
   created_at: Date;
@@ -133,6 +134,7 @@ export const emergencyRepository = {
     etaMinutes?: number;
     ambulanceEtaMinutes?: number;
     volunteerEtaMinutes?: number;
+    callerDetailsPending?: boolean;
   }): Promise<EmergencyCaseRow> => {
     const legacyDescription = input.voiceDescription ?? input.transcriptionText ?? input.emergencyType;
 
@@ -158,6 +160,7 @@ export const emergencyRepository = {
         eta_minutes,
         ambulance_eta_minutes,
         volunteer_eta_minutes,
+        caller_details_pending,
         started_at
       )
       VALUES (
@@ -180,6 +183,7 @@ export const emergencyRepository = {
         $16,
         $17,
         $18,
+        $19,
         NOW()
       )
       RETURNING *
@@ -202,7 +206,8 @@ export const emergencyRepository = {
         input.longitude,
         input.etaMinutes ?? null,
         input.ambulanceEtaMinutes ?? null,
-        input.volunteerEtaMinutes ?? null
+        input.volunteerEtaMinutes ?? null,
+        Boolean(input.callerDetailsPending)
       ]
     );
 
@@ -353,6 +358,7 @@ export const emergencyRepository = {
         eta_minutes = COALESCE($12, eta_minutes),
         ambulance_eta_minutes = COALESCE($13, ambulance_eta_minutes),
         volunteer_eta_minutes = COALESCE($14, volunteer_eta_minutes),
+        caller_details_pending = FALSE,
         updated_at = NOW()
       WHERE id = $1
       RETURNING *
@@ -376,6 +382,22 @@ export const emergencyRepository = {
     );
 
     return query.rows[0] ?? null;
+  },
+
+  listVolunteerPushTargetsForCase: async (
+    caseId: string
+  ): Promise<Array<{ volunteer_id: string; user_id: string }>> => {
+    const query = await db.query<{ volunteer_id: string; user_id: string }>(
+      `
+      SELECT v.id AS volunteer_id, v.user_id
+      FROM volunteer_assignments va
+      INNER JOIN volunteers v ON v.id = va.volunteer_id
+      WHERE va.case_id = $1 AND va.status = 'PENDING'
+      `,
+      [caseId]
+    );
+
+    return query.rows;
   },
 
   createEmergencyUpdate: async (input: {

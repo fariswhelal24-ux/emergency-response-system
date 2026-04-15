@@ -1,3 +1,4 @@
+import { CaseLiveMap } from "../components/common/CaseLiveMap";
 import { CaseDetail } from "../types";
 
 export const LiveTrackingPage = ({
@@ -25,11 +26,12 @@ export const LiveTrackingPage = ({
         <header className="panel__header">
           <h3>Real-Time Map Tracking</h3>
         </header>
-        <div className="map-surface map-surface--large">
-          <div className="map-pill map-pill--incident">Patient</div>
-          <div className="map-pill map-pill--ambulance">Ambulance</div>
-          <div className="map-pill map-pill--volunteer">Volunteer</div>
-        </div>
+        <CaseLiveMap
+          patientLocation={liveSync?.citizenLocation ?? detail.case.location}
+          volunteerLocation={liveSync?.volunteerLocation}
+          ambulanceLocation={liveSync?.ambulanceLocation}
+          ambulanceRoute={liveSync?.ambulanceRoute}
+        />
         <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
           <p style={{ margin: 0, color: "#4A627F", fontSize: 13 }}>
             Status: <strong style={{ color: "#173A63" }}>{liveSync?.statusText ?? detail.case.status}</strong>

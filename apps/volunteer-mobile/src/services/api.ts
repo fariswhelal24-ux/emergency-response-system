@@ -708,6 +708,8 @@ export type VolunteerEmergencyCase = {
   aiAnalysis: string | null;
   possibleCondition: string | null;
   riskLevel: string | null;
+  /** True until dispatcher saves case details (voice/AI form); volunteers should wait before accepting. */
+  callerDetailsPending?: boolean;
   location: {
     latitude: number;
     longitude: number;
@@ -772,6 +774,7 @@ export const fetchLatestVolunteerEmergency = async (): Promise<VolunteerEmergenc
     aiAnalysis: latest.aiAnalysis ?? null,
     possibleCondition: latest.possibleCondition ?? null,
     riskLevel: latest.riskLevel ?? null,
+    callerDetailsPending: Boolean((latest as { callerDetailsPending?: boolean }).callerDetailsPending),
     location: {
       latitude: Number(latest.location?.latitude ?? 0),
       longitude: Number(latest.location?.longitude ?? 0)

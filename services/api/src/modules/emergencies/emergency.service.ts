@@ -5,6 +5,7 @@ import { AppError } from "../../shared/errors/AppError";
 import { pushNotificationService } from "../../shared/services/push-notifications";
 import { virtualAmbulanceService } from "../../shared/services/virtual-ambulance";
 import { UserRole } from "../../shared/types/domain";
+import { emitVolunteerAssigned } from "../../sockets/realtimeServer";
 import { findNearestVolunteers } from "../../shared/utils/geo";
 import { hashPassword } from "../../shared/utils/password";
 import {
@@ -71,6 +72,7 @@ const toCaseDto = (row: EmergencyCaseRow) => ({
   etaMinutes: row.eta_minutes,
   ambulanceEtaMinutes: row.ambulance_eta_minutes,
   volunteerEtaMinutes: row.volunteer_eta_minutes,
+  callerDetailsPending: Boolean(row.caller_details_pending),
   startedAt: row.started_at,
   closedAt: row.closed_at,
   createdAt: row.created_at,
@@ -239,10 +241,54 @@ const resolveReporterForEmergency = async (
   };
 };
 
+type CreateEmergencyOptions = {
+  /** Citizen voice-call init: notify volunteers immediately but keep clinical details empty until dispatcher updates. */
+  callerDetailsPendingForVolunteers?: boolean;
+};
+
+const notifyVolunteersCaseDetailsReady = async (caseId: string, row: EmergencyCaseRow): Promise<void> => {
+  const dto = toCaseDto(row);
+  const targets = await emergencyRepository.listVolunteerPushTargetsForCase(caseId);
+  if (targets.length === 0) {
+    return;
+  }
+
+  const location = {
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude)
+  };
+
+  await pushNotificationService.sendEmergencyAlert({
+    targets: targets.map((t) => ({ volunteerId: t.volunteer_id, userId: t.user_id })),
+    payload: {
+      emergencyId: caseId,
+      location,
+      type: row.emergency_type,
+      severity: row.priority,
+      summary: row.voice_description ?? row.transcription_text ?? undefined,
+      language: detectCaseLanguage(
+        row.voice_description,
+        row.transcription_text,
+        row.ai_analysis,
+        row.emergency_type
+      ),
+      detailsUpdated: true
+    }
+  });
+
+  emitVolunteerAssigned(caseId, {
+    caseId,
+    case: dto,
+    caseDetailsReady: true
+  });
+};
+
 export const emergencyService = {
-  createEmergency: async (auth: AuthContext, input: CreateEmergencyInput) => {
+  createEmergency: async (auth: AuthContext, input: CreateEmergencyInput, options?: CreateEmergencyOptions) => {
     const reporter = await resolveReporterForEmergency(auth, input);
     const caseNumber = await emergencyRepository.generateCaseNumber();
+
+    const callerDetailsPending = options?.callerDetailsPendingForVolunteers === true;
 
     const created = await emergencyRepository.createEmergencyCase({
       caseNumber,
@@ -259,7 +305,8 @@ export const emergencyService = {
       longitude: input.longitude,
       etaMinutes: input.etaMinutes,
       ambulanceEtaMinutes: input.ambulanceEtaMinutes,
-      volunteerEtaMinutes: input.volunteerEtaMinutes
+      volunteerEtaMinutes: input.volunteerEtaMinutes,
+      callerDetailsPending
     });
 
     await emergencyRepository.createEmergencyUpdate({
@@ -349,19 +396,35 @@ export const emergencyService = {
         volunteerId: volunteer.volunteer_id,
         userId: volunteer.user_id
       })),
-      payload: {
-        emergencyId: created.id,
-        location: emergencyLocation,
-        type: created.emergency_type,
-        severity: currentCase.priority,
-        summary: created.voice_description ?? created.transcription_text ?? undefined,
-        language: detectCaseLanguage(
-          created.voice_description,
-          created.transcription_text,
-          created.ai_analysis,
-          created.emergency_type
-        )
-      }
+      payload: callerDetailsPending
+        ? {
+            emergencyId: created.id,
+            location: emergencyLocation,
+            type: detectCaseLanguage(created.voice_description, created.transcription_text, created.ai_analysis) === "ar"
+              ? "مكالمة طوارئ"
+              : "Emergency call",
+            severity: currentCase.priority,
+            language: detectCaseLanguage(
+              created.voice_description,
+              created.transcription_text,
+              created.ai_analysis,
+              created.emergency_type
+            ),
+            detailsPending: true
+          }
+        : {
+            emergencyId: created.id,
+            location: emergencyLocation,
+            type: created.emergency_type,
+            severity: currentCase.priority,
+            summary: created.voice_description ?? created.transcription_text ?? undefined,
+            language: detectCaseLanguage(
+              created.voice_description,
+              created.transcription_text,
+              created.ai_analysis,
+              created.emergency_type
+            )
+          }
     });
 
     if (volunteerAssignments.length > 0) {
@@ -421,20 +484,24 @@ export const emergencyService = {
       auth.role === "CITIZEN" || auth.role === "VOLUNTEER" ? auth.userId : requestedUserId ?? auth.userId;
     const isVolunteerCaller = auth.role === "VOLUNTEER";
 
-    return emergencyService.createEmergency(auth, {
-      emergencyType: (input.callType || (isVolunteerCaller ? "Volunteer Emergency Call" : "Emergency Voice Call")).trim(),
-      priority: isVolunteerCaller ? "CRITICAL" : "HIGH",
-      voiceDescription: isVolunteerCaller
-        ? "Volunteer initiated emergency call. Ambulance dispatch started."
-        : "Emergency call started. AI listening is active.",
-      address: input.location.address?.trim() || "Live caller location",
-      latitude: input.location.latitude,
-      longitude: input.location.longitude,
-      riskLevel: isVolunteerCaller ? "CRITICAL" : "HIGH",
-      ...(auth.role === "DISPATCHER" || auth.role === "ADMIN"
-        ? { callerUserId: linkedCallerUserId }
-        : {})
-    });
+    return emergencyService.createEmergency(
+      auth,
+      {
+        emergencyType: (input.callType || (isVolunteerCaller ? "Volunteer Emergency Call" : "Emergency Voice Call")).trim(),
+        priority: isVolunteerCaller ? "CRITICAL" : "HIGH",
+        voiceDescription: isVolunteerCaller
+          ? "Volunteer initiated emergency call. Ambulance dispatch started."
+          : "Emergency call started. AI listening is active.",
+        address: input.location.address?.trim() || "Live caller location",
+        latitude: input.location.latitude,
+        longitude: input.location.longitude,
+        riskLevel: isVolunteerCaller ? "CRITICAL" : "HIGH",
+        ...(auth.role === "DISPATCHER" || auth.role === "ADMIN"
+          ? { callerUserId: linkedCallerUserId }
+          : {})
+      },
+      auth.role === "CITIZEN" && !isVolunteerCaller ? { callerDetailsPendingForVolunteers: true } : undefined
+    );
   },
 
   listEmergencies: async (auth: AuthContext, query: EmergencyListQueryInput) => {
@@ -525,6 +592,8 @@ export const emergencyService = {
       throw new AppError("Emergency case not found", 404);
     }
 
+    const hadCallerDetailsPending = Boolean(existing.caller_details_pending);
+
     const updated = await emergencyRepository.updateCaseDetails({
       caseId,
       emergencyType: input.emergencyType,
@@ -553,6 +622,10 @@ export const emergencyService = {
       message: "Case details updated by dispatcher",
       payload: input
     });
+
+    if (hadCallerDetailsPending && updated) {
+      await notifyVolunteersCaseDetailsReady(caseId, updated);
+    }
 
     return toCaseDto(updated);
   },
@@ -683,6 +756,14 @@ export const emergencyService = {
 
     if (assignment.volunteer_id !== volunteerId) {
       throw new AppError("You can only respond to your own assignment", 403);
+    }
+
+    const caseRow = await emergencyRepository.findCaseById(caseId);
+    if (caseRow?.caller_details_pending && input.accepted) {
+      throw new AppError(
+        "Caller case details are still being collected. Wait for the updated alert, or decline if you cannot respond.",
+        409
+      );
     }
 
     const nextStatus = input.accepted ? "ACCEPTED" : "DECLINED";

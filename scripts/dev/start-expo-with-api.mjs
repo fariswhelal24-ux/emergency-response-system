@@ -12,12 +12,27 @@ const API_READY_TIMEOUT_MS = 30_000;
 const API_POLL_INTERVAL_MS = 750;
 const PUBLIC_TUNNEL_TIMEOUT_MS = 20_000;
 const PUBLIC_TUNNEL_CF_URL_TIMEOUT_MS = 28_000;
-const PUBLIC_TUNNEL_HEALTH_TIMEOUT_MS = 8_000;
-const TUNNEL_HEALTH_RETRIES = 4;
-const TUNNEL_HEALTH_RETRY_DELAY_MS = 1_500;
+const PUBLIC_TUNNEL_HEALTH_TIMEOUT_MS = 10_000;
+const TUNNEL_HEALTH_RETRIES = 10;
+const TUNNEL_HEALTH_RETRY_DELAY_MS = 2_500;
 const PUBLIC_MODE_FLAGS = new Set(["--public", "--open"]);
 const PUBLIC_MODE_ENV_VALUES = new Set(["1", "true", "yes", "on"]);
+const PUBLIC_TUNNEL_FALLBACK_ENV = "ERS_ALLOW_PUBLIC_FALLBACK_TUNNELS";
 const DEFAULT_EXPO_METRO_PORT = "8081";
+const PROXY_ENV_KEYS = [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+  "SOCKS_PROXY",
+  "SOCKS5_PROXY",
+  "socks_proxy",
+  "socks5_proxy",
+  "GIT_HTTP_PROXY",
+  "GIT_HTTPS_PROXY"
+];
 
 const resolveExpoMetroPort = () => {
   const raw = process.env.ERS_EXPO_METRO_PORT?.trim() || process.env.EXPO_DEV_SERVER_PORT?.trim();
@@ -29,6 +44,12 @@ const resolveExpoMetroPort = () => {
 };
 
 const expoMetroPort = resolveExpoMetroPort();
+
+const clearProxyEnv = (target) => {
+  for (const key of PROXY_ENV_KEYS) {
+    delete target[key];
+  }
+};
 
 const isLikelyVirtualInterface = (name) => {
   return /^(lo\d*|utun\d*|awdl\d*|llw\d*|bridge\d*|anpi\d*|gif\d*|stf\d*|p2p\d*|vboxnet\d*|vmnet\d*|docker\d*|br-\w+|veth\w+|tailscale\d*|wg\d*|zt\d*)$/i.test(
@@ -82,7 +103,15 @@ const extractHostFromApiBase = (value) => {
 };
 
 const resolveLocalIpv4 = () => {
-  const interfaces = networkInterfaces();
+  let interfaces;
+  try {
+    interfaces = networkInterfaces();
+  } catch (error) {
+    console.warn(
+      `[start-expo-with-api] Could not read local network interfaces (${error instanceof Error ? error.message : String(error)}).`
+    );
+    return null;
+  }
   const candidates = [];
 
   for (const [name, entries] of Object.entries(interfaces)) {
@@ -254,6 +283,9 @@ const publicModeFromArg = rawArgs.some((arg) => PUBLIC_MODE_FLAGS.has(arg));
 const incomingArgs = rawArgs.filter((arg) => !PUBLIC_MODE_FLAGS.has(arg));
 const publicModeFromEnv = PUBLIC_MODE_ENV_VALUES.has((process.env.EXPO_PUBLIC_MODE ?? "").trim().toLowerCase());
 const publicMode = publicModeFromArg || publicModeFromEnv;
+const allowPublicTunnelFallbacks = PUBLIC_MODE_ENV_VALUES.has(
+  (process.env[PUBLIC_TUNNEL_FALLBACK_ENV] ?? "").trim().toLowerCase()
+);
 const forceExpoWsTunnel =
   publicMode &&
   !PUBLIC_MODE_ENV_VALUES.has((process.env.EXPO_USE_NGROK_TUNNEL ?? "").trim().toLowerCase());
@@ -297,6 +329,10 @@ if (
   }
 
   process.exit(1);
+}
+
+if (publicMode) {
+  clearProxyEnv(process.env);
 }
 
 const explicitApiBase =
@@ -416,10 +452,13 @@ const openCloudflaredQuickTunnel = async () => {
     let settled = false;
     let buffer = "";
 
+    const cloudflaredEnv = { ...process.env };
+    clearProxyEnv(cloudflaredEnv);
+
     const child = spawn(
       "cloudflared",
-      ["tunnel", "--no-autoupdate", "--url", `http://127.0.0.1:${API_PORT}`],
-      { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env } }
+      ["tunnel", "--protocol", "http2", "--no-autoupdate", "--url", `http://127.0.0.1:${API_PORT}`],
+      { stdio: ["ignore", "pipe", "pipe"], env: cloudflaredEnv }
     );
 
     const finish = (fn) => {
@@ -522,7 +561,13 @@ const resolvePublicApiBase = async () => {
     }
   } catch (error) {
     console.warn(
-      `[${appName}] cloudflared failed (${error instanceof Error ? error.message : String(error)}). Trying ngrok...`
+      `[${appName}] cloudflared failed (${error instanceof Error ? error.message : String(error)}).`
+    );
+  }
+
+  if (!allowPublicTunnelFallbacks) {
+    throw new Error(
+      `Public mode requires cloudflared for stable connectivity. Install it (brew install cloudflared), then rerun. To allow fallback tunnels for debugging only, set ${PUBLIC_TUNNEL_FALLBACK_ENV}=1.`
     );
   }
 
