@@ -14,20 +14,21 @@ const startServer = async (): Promise<void> => {
   await systemBootstrapService.ensureStaticAmbulanceSetup();
   console.log("Static ambulance bootstrap is ready (Bethlehem, AMB-BETH-001).");
 
-  // ✅ التعديل هنا: نخلي السيرفر يستقبل من كل الشبكة
-  server.listen(env.port, "0.0.0.0", () => {
-    console.log(`🚀 Emergency backend running on:`);
-    console.log(`➡️ Local:   http://localhost:${env.port}`);
-    console.log(`➡️ Network: http://YOUR_IP:${env.port}`);
+  // 🔥 الحل النهائي (حل مشكلة Railway + TypeScript)
+  const PORT = Number(process.env.PORT) || env.port || 4100;
+
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`🚀 Emergency backend running on port ${PORT}`);
   });
 };
 
 void startServer().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`Failed to start server bootstrap: ${message}`);
+  console.error(`❌ Failed to start server bootstrap: ${message}`);
   process.exit(1);
 });
 
+// graceful shutdown
 const shutdown = async (signal: string): Promise<void> => {
   console.log(`Received ${signal}. Shutting down gracefully...`);
 
