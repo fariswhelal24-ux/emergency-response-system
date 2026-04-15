@@ -1,7 +1,6 @@
 import { createServer } from "node:http";
 
 import { app } from "./app";
-import { env } from "./config/env";
 import { db } from "./database/pool";
 import { systemBootstrapService } from "./shared/services/system-bootstrap";
 import { attachRealtimeServer } from "./sockets/realtimeServer";
@@ -12,25 +11,21 @@ attachRealtimeServer(server);
 
 const startServer = async (): Promise<void> => {
   await systemBootstrapService.ensureStaticAmbulanceSetup();
-  console.log("Static ambulance bootstrap is ready (Bethlehem, AMB-BETH-001).");
 
-  // 🔥 الحل النهائي (حل مشكلة Railway + TypeScript)
-  const PORT = Number(process.env.PORT) || env.port || 4100;
+  const PORT = Number(process.env.PORT) || 4100;
 
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 Emergency backend running on port ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
   });
 };
 
 void startServer().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`❌ Failed to start server bootstrap: ${message}`);
+  console.error("Startup error:", error);
   process.exit(1);
 });
 
-// graceful shutdown
 const shutdown = async (signal: string): Promise<void> => {
-  console.log(`Received ${signal}. Shutting down gracefully...`);
+  console.log(`Received ${signal}. Shutting down...`);
 
   server.close(async () => {
     await db.close();
@@ -38,10 +33,5 @@ const shutdown = async (signal: string): Promise<void> => {
   });
 };
 
-process.on("SIGINT", () => {
-  void shutdown("SIGINT");
-});
-
-process.on("SIGTERM", () => {
-  void shutdown("SIGTERM");
-});
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
