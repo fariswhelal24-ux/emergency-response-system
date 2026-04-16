@@ -24,6 +24,53 @@ const BOOT_TABLE_DEFINITIONS: string[] = [
   `
 ];
 
+// Ensures the `users` table has every column the application code relies on,
+// regardless of how the DB was originally provisioned (some environments
+// created it with legacy snake_case/camelCase or missing optional columns).
+const USERS_SCHEMA_GUARD: string[] = [
+  `CREATE TABLE IF NOT EXISTS users (
+     id UUID PRIMARY KEY,
+     full_name TEXT NOT NULL DEFAULT '',
+     email TEXT NOT NULL,
+     phone TEXT,
+     password_hash TEXT NOT NULL DEFAULT '',
+     role TEXT NOT NULL DEFAULT 'CITIZEN',
+     avatar_url TEXT,
+     is_active BOOLEAN NOT NULL DEFAULT TRUE,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name TEXT`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+  // Backfill from common legacy camelCase column names if they exist.
+  `UPDATE users
+     SET full_name = COALESCE(NULLIF(full_name, ''), "fullName")
+     WHERE full_name IS NULL OR full_name = ''`,
+  `UPDATE users
+     SET password_hash = COALESCE(NULLIF(password_hash, ''), "passwordHash")
+     WHERE password_hash IS NULL OR password_hash = ''`,
+  // Unique email index (safe to re-run).
+  `CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users (email)`
+];
+
+const REFRESH_TOKENS_SCHEMA_GUARD: string[] = [
+  `CREATE TABLE IF NOT EXISTS refresh_tokens (
+     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+     user_id UUID NOT NULL,
+     token TEXT NOT NULL UNIQUE,
+     expires_at TIMESTAMPTZ NOT NULL,
+     revoked_at TIMESTAMPTZ,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`
+];
+
 const candidateMigrationDirs = async (): Promise<string[]> => {
   const here = __dirname;
   const candidates = [
@@ -96,6 +143,20 @@ const runPendingMigrations = async (): Promise<void> => {
   }
 };
 
+const runStatementsSafely = async (statements: string[], label: string): Promise<void> => {
+  for (const statement of statements) {
+    try {
+      await db.query(statement);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // Many of these ALTER/UPDATE statements are only relevant when legacy
+      // columns exist. We intentionally swallow per-statement failures so a
+      // missing legacy column (e.g. "fullName") does not block boot.
+      console.warn(`[DB] ${label} statement skipped:`, message);
+    }
+  }
+};
+
 export const initDatabase = async (): Promise<void> => {
   try {
     await runPendingMigrations();
@@ -103,11 +164,7 @@ export const initDatabase = async (): Promise<void> => {
     console.warn("[DB] Pending migrations check failed:", error);
   }
 
-  for (const statement of BOOT_TABLE_DEFINITIONS) {
-    try {
-      await db.query(statement);
-    } catch (error) {
-      console.warn("[DB] Boot table definition failed:", error);
-    }
-  }
+  await runStatementsSafely(USERS_SCHEMA_GUARD, "users schema guard");
+  await runStatementsSafely(REFRESH_TOKENS_SCHEMA_GUARD, "refresh_tokens schema guard");
+  await runStatementsSafely(BOOT_TABLE_DEFINITIONS, "boot table definition");
 };
