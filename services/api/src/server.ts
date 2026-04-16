@@ -1,26 +1,30 @@
 import { createServer } from "node:http";
 
 import { app } from "./app.js";
+import { initDatabase } from "./database/init.js";
 import { db } from "./database/pool.js";
 import { systemBootstrapService } from "./shared/services/system-bootstrap.js";
 import { attachRealtimeServer } from "./sockets/realtimeServer.js";
 
 const server = createServer(app);
 
-attachRealtimeServer(server);
+//attachRealtimeServer(server);
 
 const startServer = async (): Promise<void> => {
-  // 🔥 لا تخلي bootstrap يكسّر السيرفر
+  try {
+    await initDatabase();
+    console.log("✅ Database initialized");
+  } catch (error) {
+    console.warn("⚠️ Database init skipped:", error);
+  }
+
   try {
     await systemBootstrapService.ensureStaticAmbulanceSetup();
   } catch (error) {
-    console.warn("⚠️ Skipping bootstrap:", error);
+    console.warn("⚠️ Bootstrap skipped:", error);
   }
 
-  // ✅ Railway PORT
   const PORT = Number(process.env.PORT) || 8080;
-
-  console.log("PORT =", PORT);
 
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 Server running on port ${PORT}`);
