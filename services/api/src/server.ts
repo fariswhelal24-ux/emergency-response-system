@@ -8,7 +8,12 @@ import { attachRealtimeServer } from "./sockets/realtimeServer.js";
 
 const server = createServer(app);
 
-//attachRealtimeServer(server);
+try {
+  attachRealtimeServer(server);
+  console.log("✅ Realtime (socket.io) server attached");
+} catch (error) {
+  console.warn("⚠️ Realtime server attach failed (continuing without sockets):", error);
+}
 
 const startServer = async (): Promise<void> => {
   try {

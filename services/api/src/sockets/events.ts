@@ -11,6 +11,7 @@ export const socketEvents = {
 
   emergencyCreated: "emergency:created",
   emergencyCreatedV2: "emergency_created",
+  newRequest: "new_request",
   emergencyUpdate: "emergency:update",
   statusChanged: "emergency:status-changed",
   statusChangedV2: "status_changed",

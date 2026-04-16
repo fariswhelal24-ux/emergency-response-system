@@ -4,7 +4,6 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 
-import { env } from "./config/env.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { notFoundHandler } from "./middlewares/notFound.js";
 import { authenticate } from "./middlewares/authenticate.js";
@@ -28,36 +27,12 @@ export const app = express();
 
 app.set("trust proxy", 1);
 
-const DEV_LOCAL_ORIGIN_PATTERN = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i;
-const DEV_LAN_ORIGIN_PATTERN =
-  /^https?:\/\/(?:10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?::\d+)?$/i;
-const DEV_TUNNEL_ORIGIN_PATTERN =
-  /^https:\/\/[\w.-]+\.(trycloudflare\.com|loca\.lt|ngrok-free\.app|ngrok\.app|ngrok\.io)(?::\d+)?$/i;
-
-const isAllowedOrigin = (origin?: string): boolean => {
-  if (!origin) return true;
-
-  if (env.clientOrigins.includes(origin)) return true;
-
-  if (
-    !env.isProduction &&
-    (DEV_LOCAL_ORIGIN_PATTERN.test(origin) ||
-      DEV_LAN_ORIGIN_PATTERN.test(origin) ||
-      DEV_TUNNEL_ORIGIN_PATTERN.test(origin))
-  ) {
-    return true;
-  }
-
-  return false;
-};
-
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (isAllowedOrigin(origin)) return callback(null, true);
-      return callback(new Error(`CORS blocked for origin: ${origin ?? "unknown"}`));
-    },
-    credentials: true
+    origin: true,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"]
   })
 );
 
@@ -71,7 +46,7 @@ app.use(
     limit: 240,
     standardHeaders: true,
     legacyHeaders: false
-  })
+  }) as unknown as express.RequestHandler
 );
 
 //
@@ -121,6 +96,19 @@ app.post(
   authenticate,
   validateBody(createEmergencySchema),
   asyncHandler(emergencyController.createEmergency)
+);
+
+app.post(
+  "/api/v1/emergency/request",
+  authenticate,
+  validateBody(createEmergencySchema),
+  asyncHandler(emergencyController.requestEmergency)
+);
+
+app.get(
+  "/api/v1/emergency/active",
+  authenticate,
+  asyncHandler(emergencyController.listActiveEmergencyRequests)
 );
 
 app.use("/api/v1/emergencies", emergencyRoutes);

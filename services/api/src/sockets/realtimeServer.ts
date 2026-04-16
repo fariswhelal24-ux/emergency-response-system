@@ -3,7 +3,6 @@ import { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
 import { z } from "zod";
 
-import { env } from "../config/env.js";
 import { locationRepository } from "../modules/locations/location.repository.js";
 import { LocationActor, locationActors } from "../shared/types/domain.js";
 import { verifyAccessToken } from "../shared/utils/token.js";
@@ -98,8 +97,10 @@ const emitCallLifecycle = (
 export const attachRealtimeServer = (server: HttpServer): void => {
   io = new Server(server, {
     cors: {
-      origin: env.clientOrigins,
-      credentials: true
+      origin: true,
+      credentials: true,
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"]
     }
   });
 
@@ -154,6 +155,12 @@ export const attachRealtimeServer = (server: HttpServer): void => {
 
       socket.on(socketEvents.caseLeave, (caseId: string) => {
         socket.leave(`case:${caseId}`);
+      });
+
+      socket.on(socketEvents.newRequest, (payload: unknown) => {
+        console.log("[socket] new_request received from citizen", auth.userId);
+        emitToDispatchRoles(socketEvents.newRequest, payload);
+        emitToRooms(["role:VOLUNTEER"], socketEvents.newRequest, payload);
       });
 
       const handleCallStateEvent = (
@@ -262,8 +269,11 @@ export const attachRealtimeServer = (server: HttpServer): void => {
 };
 
 export const emitEmergencyCreated = (payload: unknown): void => {
+  console.log("[socket] broadcasting new emergency request");
   emitToDispatchRoles(emergencyCreatedEvents, payload);
+  emitToDispatchRoles(socketEvents.newRequest, payload);
   emitToRooms(["role:VOLUNTEER"], emergencyCreatedEvents, payload);
+  emitToRooms(["role:VOLUNTEER"], socketEvents.newRequest, payload);
 
   const reportingUserId =
     typeof payload === "object" && payload && "reportingUserId" in payload

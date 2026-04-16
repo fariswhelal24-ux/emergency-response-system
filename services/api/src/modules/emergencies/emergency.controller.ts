@@ -85,6 +85,26 @@ const emitInitialCaseLifecycle = (
 };
 
 export const emergencyController = {
+  requestEmergency: async (request: Request, response: Response): Promise<void> => {
+    const auth = getAuthContext(request);
+    const payload = request.body as CreateEmergencyInput;
+    console.log("[emergency/request] incoming request from", auth.userId, auth.role);
+    const emergencyCase = (await emergencyService.createEmergency(auth, payload)) as {
+      id: string;
+      autoDispatch?: {
+        ambulanceAssignment?: unknown;
+        volunteerAssignments?: unknown[];
+      };
+      [key: string]: unknown;
+    };
+    emitInitialCaseLifecycle(auth, emergencyCase);
+
+    response.status(201).json({
+      message: "Emergency request created successfully",
+      data: emergencyCase
+    });
+  },
+
   createEmergency: async (request: Request, response: Response): Promise<void> => {
     const auth = getAuthContext(request);
     const payload = request.body as CreateEmergencyInput;
@@ -154,6 +174,26 @@ export const emergencyController = {
       data: emergencyCases,
       meta: {
         count: emergencyCases.length,
+        limit: query.limit,
+        offset: query.offset
+      }
+    });
+  },
+
+  listActiveEmergencyRequests: async (request: Request, response: Response): Promise<void> => {
+    const auth = getAuthContext(request);
+    const query = emergencyListQuerySchema.parse({
+      limit: request.query.limit,
+      offset: request.query.offset
+    }) as EmergencyListQueryInput;
+
+    const emergencyCases = await emergencyService.listEmergencies(auth, query);
+    const active = emergencyCases.filter((item) => item.status !== "CLOSED" && item.status !== "CANCELLED");
+
+    response.json({
+      data: active,
+      meta: {
+        count: active.length,
         limit: query.limit,
         offset: query.offset
       }

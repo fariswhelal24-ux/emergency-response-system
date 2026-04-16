@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 
 import { AppError } from "../../shared/errors/AppError.js";
 import { comparePassword, hashPassword } from "../../shared/utils/password.js";
+import { isLikelyPalestinePhone, normalizePhone } from "../../shared/utils/phone.js";
 import {
   signAccessToken,
   signRefreshToken,
@@ -71,77 +72,109 @@ const issueTokenPair = async (user: UserRecord) => {
 
 export const authService = {
   register: async (input: RegisterInput) => {
-    const email = input.email.toLowerCase();
-    const existing = await authRepository.findUserByEmail(email);
+    try {
+      const email = input.email.toLowerCase();
+      const existing = await authRepository.findUserByEmail(email);
 
-    if (existing) {
-      throw new AppError("Email is already registered", 409);
-    }
+      if (existing) {
+        throw new AppError("Email is already registered", 409, {
+          error: "Email is already registered"
+        });
+      }
 
-    const passwordHash = await hashPassword(input.password);
-    const user = await authRepository.createUser({
-      fullName: input.fullName,
-      email,
-      phone: input.phone,
-      passwordHash,
-      role: input.role
-    });
-
-    await authRepository.bootstrapRoleProfile({ userId: user.id, role: user.role });
-    if (user.role === "VOLUNTEER") {
-      emitVolunteerAvailabilityChanged({
-        source: "auth:register",
-        userId: user.id,
-        email: user.email,
-        availability: "AVAILABLE",
-        at: new Date().toISOString()
+      const normalizedPhone = input.phone ? normalizePhone(input.phone) : undefined;
+      const passwordHash = await hashPassword(input.password);
+      const user = await authRepository.createUser({
+        fullName: input.fullName,
+        email,
+        phone: normalizedPhone,
+        passwordHash,
+        role: input.role
       });
-    }
-    const tokens = await issueTokenPair(user);
 
-    return {
-      user: toPublicUser(user),
-      tokens
-    };
+      await authRepository.bootstrapRoleProfile({ userId: user.id, role: user.role });
+      if (user.role === "VOLUNTEER") {
+        emitVolunteerAvailabilityChanged({
+          source: "auth:register",
+          userId: user.id,
+          email: user.email,
+          availability: "AVAILABLE",
+          at: new Date().toISOString()
+        });
+      }
+      const tokens = await issueTokenPair(user);
+
+      return {
+        user: toPublicUser(user),
+        tokens
+      };
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : "Registration failed";
+      throw new AppError(message, 400, { error: message });
+    }
   },
 
   login: async (input: LoginInput) => {
-    const identifier = input.identifier.trim();
-    const isEmail = identifier.includes("@");
-    const user = isEmail
-      ? await authRepository.findUserByEmail(identifier.toLowerCase())
-      : await authRepository.findUserByPhone(identifier);
+    try {
+      const identifier = input.identifier.trim();
+      const isEmail = identifier.includes("@");
+      let user: UserRecord | null = null;
 
-    if (!user) {
-      throw new AppError("Invalid login or password", 401);
+      if (isEmail) {
+        user = await authRepository.findUserByEmail(identifier.toLowerCase());
+      } else {
+        if (!isLikelyPalestinePhone(identifier)) {
+          throw new AppError("Invalid credentials", 401, { error: "Invalid credentials" });
+        }
+
+        const normalizedPhone = normalizePhone(identifier);
+        user = await authRepository.findUserByPhone(normalizedPhone);
+
+        if (!user && normalizedPhone !== identifier) {
+          user = await authRepository.findUserByPhone(identifier);
+        }
+      }
+
+      if (!user) {
+        throw new AppError("Invalid credentials", 401, { error: "Invalid credentials" });
+      }
+
+      const matches = await comparePassword(input.password, user.password_hash);
+
+      if (!matches) {
+        throw new AppError("Invalid credentials", 401, { error: "Invalid credentials" });
+      }
+
+      if (!user.is_active) {
+        throw new AppError("Account is disabled", 403, { error: "Account is disabled" });
+      }
+
+      await authRepository.bootstrapRoleProfile({ userId: user.id, role: user.role });
+      if (user.role === "VOLUNTEER") {
+        emitVolunteerAvailabilityChanged({
+          source: "auth:login",
+          userId: user.id,
+          email: user.email,
+          availability: "AVAILABLE",
+          at: new Date().toISOString()
+        });
+      }
+      const tokens = await issueTokenPair(user);
+
+      return {
+        user: toPublicUser(user),
+        tokens
+      };
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      console.error("[AUTH_SERVICE] login failed:", error);
+      throw new AppError("Invalid credentials", 401, { error: "Invalid credentials" });
     }
-
-    const matches = await comparePassword(input.password, user.password_hash);
-
-    if (!matches) {
-      throw new AppError("Invalid login or password", 401);
-    }
-
-    if (!user.is_active) {
-      throw new AppError("Account is disabled", 403);
-    }
-
-    await authRepository.bootstrapRoleProfile({ userId: user.id, role: user.role });
-    if (user.role === "VOLUNTEER") {
-      emitVolunteerAvailabilityChanged({
-        source: "auth:login",
-        userId: user.id,
-        email: user.email,
-        availability: "AVAILABLE",
-        at: new Date().toISOString()
-      });
-    }
-    const tokens = await issueTokenPair(user);
-
-    return {
-      user: toPublicUser(user),
-      tokens
-    };
   },
 
   refresh: async (refreshToken: string) => {
