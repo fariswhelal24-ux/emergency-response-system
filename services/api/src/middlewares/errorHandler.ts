@@ -20,15 +20,20 @@ export const errorHandler = (
   }
 
   if (error instanceof AppError) {
+    const detailsObj =
+      typeof error.details === "object" && error.details !== null
+        ? (error.details as Record<string, unknown>)
+        : undefined;
+    const resolvedError =
+      detailsObj && typeof detailsObj.error === "string"
+        ? (detailsObj.error as string)
+        : error.message;
+    const reason = detailsObj && typeof detailsObj.reason === "string" ? (detailsObj.reason as string) : undefined;
+
     response.status(error.statusCode).json({
-      error:
-        typeof error.details === "object" &&
-        error.details !== null &&
-        "error" in (error.details as Record<string, unknown>) &&
-        typeof (error.details as Record<string, unknown>).error === "string"
-          ? ((error.details as Record<string, unknown>).error as string)
-          : error.message,
+      error: resolvedError,
       message: error.message,
+      ...(reason ? { reason } : {}),
       details: error.details
     });
     return;

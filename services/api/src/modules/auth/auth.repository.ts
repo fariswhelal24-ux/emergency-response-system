@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { db } from "../../database/pool.js";
 import { AppError } from "../../shared/errors/AppError.js";
 import { UserRole } from "../../shared/types/domain.js";
@@ -84,19 +86,24 @@ export const authRepository = {
     role: UserRole;
   }): Promise<UserRecord> => {
     try {
+      const newId = randomUUID();
       const query = await db.query<UserRecord>(
         `
-        INSERT INTO users (full_name, email, phone, password_hash, role)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO users (id, full_name, email, phone, password_hash, role)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
         `,
-        [input.fullName, input.email, input.phone ?? null, input.passwordHash, input.role]
+        [newId, input.fullName, input.email, input.phone ?? null, input.passwordHash, input.role]
       );
 
       return query.rows[0];
     } catch (error) {
       console.error("[AUTH_REPOSITORY] createUser failed:", error);
-      throw new AppError("Could not create user account", 500);
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new AppError("Could not create user account", 500, {
+        error: "Could not create user account",
+        reason
+      });
     }
   },
 
