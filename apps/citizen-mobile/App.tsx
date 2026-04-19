@@ -1,8 +1,11 @@
 import { StatusBar } from "expo-status-bar";
 import * as Location from "expo-location";
+import * as Updates from "expo-updates";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Linking, StyleSheet, Text, View } from "react-native";
+import { AppState, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { io, Socket } from "socket.io-client";
+
+const APP_BUILD_TAG = "v2.1.0-auth-2026-04-19";
 
 import { BottomNav as VolunteerBottomNav } from "../volunteer-mobile/src/components/BottomNav";
 import {
@@ -380,6 +383,8 @@ export default function App() {
   const [authStage, setAuthStage] = useState<AuthStage>("splash");
   const [accountType, setAccountType] = useState<AccountType>("USER");
   const [authenticatedRole, setAuthenticatedRole] = useState<AccountType | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<string>("");
+  const [updateBusy, setUpdateBusy] = useState<boolean>(false);
   const [citizenProfileState, setCitizenProfileState] = useState<CitizenEditableProfile>(defaultCitizenProfile);
   const [volunteerProfileState, setVolunteerProfileState] =
     useState<VolunteerEditableProfile>(defaultVolunteerProfile);
@@ -1138,6 +1143,71 @@ export default function App() {
 
     return () => clearTimeout(timer);
   }, [authStage]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const autoCheckForUpdates = async () => {
+      try {
+        if (typeof Updates.checkForUpdateAsync !== "function") {
+          return;
+        }
+        const check = await Updates.checkForUpdateAsync();
+        if (cancelled) {
+          return;
+        }
+        if (check && check.isAvailable) {
+          setUpdateStatus("Downloading latest version...");
+          const fetched = await Updates.fetchUpdateAsync();
+          if (cancelled) {
+            return;
+          }
+          if (fetched && fetched.isNew) {
+            setUpdateStatus("New version ready. Reloading...");
+            await Updates.reloadAsync();
+          }
+        }
+      } catch {
+      }
+    };
+
+    void autoCheckForUpdates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleForceRefresh = useCallback(async () => {
+    if (updateBusy) {
+      return;
+    }
+    setUpdateBusy(true);
+    setUpdateStatus("Checking for latest version...");
+    try {
+      const check = await Updates.checkForUpdateAsync();
+      if (check && check.isAvailable) {
+        setUpdateStatus("Downloading...");
+        const fetched = await Updates.fetchUpdateAsync();
+        if (fetched && fetched.isNew) {
+          setUpdateStatus("Reloading app with new version...");
+          await Updates.reloadAsync();
+          return;
+        }
+      }
+      setUpdateStatus("Already on latest version. Reloading...");
+      try {
+        await Updates.reloadAsync();
+      } catch {
+        setUpdateStatus("Already on latest version.");
+        setUpdateBusy(false);
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      setUpdateStatus(`Update check failed: ${reason}`);
+      setUpdateBusy(false);
+    }
+  }, [updateBusy]);
 
   useEffect(() => {
     if (authStage !== "authenticated" || authenticatedRole !== "VOLUNTEER") {
@@ -2261,6 +2331,25 @@ export default function App() {
       <View style={styles.root}>
         <StatusBar style="dark" />
         {authContent}
+
+        <View style={styles.buildBadge} pointerEvents="box-none">
+          <Text style={styles.buildBadgeText}>Build {APP_BUILD_TAG}</Text>
+          <Pressable
+            onPress={handleForceRefresh}
+            disabled={updateBusy}
+            style={({ pressed }) => [
+              styles.buildBadgeButton,
+              pressed ? styles.buildBadgeButtonPressed : null,
+              updateBusy ? styles.buildBadgeButtonDisabled : null
+            ]}
+          >
+            <Text style={styles.buildBadgeButtonText}>
+              {updateBusy ? "Updating..." : "Force Refresh App"}
+            </Text>
+          </Pressable>
+          {updateStatus ? <Text style={styles.buildBadgeStatus}>{updateStatus}</Text> : null}
+        </View>
+
         {banner ? (
           <View style={styles.authBanner}>
             <Text style={styles.bannerText}>{banner}</Text>
@@ -2358,6 +2447,41 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm
+  },
+  buildBadge: {
+    position: "absolute",
+    top: 4,
+    right: 8,
+    alignItems: "flex-end",
+    gap: 4
+  },
+  buildBadgeText: {
+    fontSize: 10,
+    color: "#6B7B8F",
+    fontWeight: "600"
+  },
+  buildBadgeButton: {
+    backgroundColor: "#1A4F7A",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12
+  },
+  buildBadgeButtonPressed: {
+    opacity: 0.7
+  },
+  buildBadgeButtonDisabled: {
+    opacity: 0.5
+  },
+  buildBadgeButtonText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  buildBadgeStatus: {
+    fontSize: 10,
+    color: "#1A4F7A",
+    maxWidth: 200,
+    textAlign: "right"
   },
   bannerText: {
     color: "#E7F0FB",
