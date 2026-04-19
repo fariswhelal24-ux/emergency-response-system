@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { io, Socket } from "socket.io-client";
 
-const APP_BUILD_TAG = "v2.1.0-auth-2026-04-19";
+const APP_BUILD_TAG = "v2.2.0-fulltables-2026-04-19";
 
 import { BottomNav as VolunteerBottomNav } from "../volunteer-mobile/src/components/BottomNav";
 import {
