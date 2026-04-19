@@ -43,6 +43,7 @@ import {
   listCitizenEmergencies,
   loginCitizenAccount,
   registerCitizenAccount,
+  switchAccountRole,
   sendCitizenLocationUpdate,
   sendEmergencyUpdate,
   updateCitizenMedicalProfile,
@@ -211,6 +212,18 @@ const simplifyNetworkError = (message: string): string => {
     return "Cannot reach the server. Start the API. For another network: run pnpm run dev:mobile:public (port 8081 free), scan the new QR, reopen the app. Same Wi‑Fi: pnpm run dev:mobile:phone.";
   }
   return text;
+};
+
+const deriveCitizenNameFromIdentifier = (identifier: string): string => {
+  const base = identifier.split("@")[0]?.trim() || "Citizen User";
+  const cleaned = base.replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!cleaned) {
+    return "Citizen User";
+  }
+  return cleaned
+    .split(" ")
+    .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
+    .join(" ");
 };
 
 const isEmailIdentifier = (value: string): boolean => /^\S+@\S+\.\S+$/.test(value.trim());
@@ -487,6 +500,11 @@ export default function App() {
         address: payloadOverride?.address ?? "Live device location",
         latitude: payloadOverride?.latitude ?? latestLocation.latitude,
         longitude: payloadOverride?.longitude ?? latestLocation.longitude
+      });
+      console.log("[Citizen] emergency request sent", {
+        caseId: created.id,
+        latitude: latestLocation.latitude,
+        longitude: latestLocation.longitude
       });
 
       setActiveCaseId(created.id);
@@ -1272,6 +1290,7 @@ export default function App() {
     };
 
     const handleRealtimeEmergency = (payload: unknown) => {
+      console.log("[Volunteer] realtime emergency event received", payload);
       const incoming = toVolunteerEmergencyFromSocket(payload);
       if (incoming) {
         applyVolunteerEmergencyState(incoming);
@@ -1302,6 +1321,7 @@ export default function App() {
           }
         });
 
+        socket.on("new_request", handleRealtimeEmergency);
         socket.on("emergency_created", handleRealtimeEmergency);
         socket.on("volunteer_requested", handleRealtimeEmergency);
         socket.on("emergency:update", handleRealtimeEmergency);
@@ -1460,58 +1480,120 @@ export default function App() {
 
     const loginTask = async () => {
       const identifier = input.identifier.trim();
-      const primaryIsVolunteer = accountType === "VOLUNTEER";
-      const primaryLogin = primaryIsVolunteer ? loginVolunteerAccount : loginCitizenAccount;
-      const fallbackLogin = primaryIsVolunteer ? loginCitizenAccount : loginVolunteerAccount;
+      let authData;
 
-      let resolvedRole = "";
-      let finalError: Error | null = null;
-      try {
-        const primaryAuth = await primaryLogin({
-          identifier,
-          password: input.password
-        });
-        resolvedRole = String(primaryAuth?.user?.role || "").toUpperCase();
-      } catch (primaryError) {
+      if (accountType === "VOLUNTEER") {
         try {
-          const fallbackAuth = await fallbackLogin({
+          authData = await loginVolunteerAccount({
             identifier,
             password: input.password
           });
-          resolvedRole = String(fallbackAuth?.user?.role || "").toUpperCase();
-        } catch (fallbackError) {
-          finalError = fallbackError instanceof Error ? fallbackError : new Error(String(fallbackError));
+        } catch (error) {
+          const raw = error instanceof Error ? error.message : String(error);
+          const normalized = raw.toLowerCase();
+          const canAutoCreateVolunteer =
+            identifier.includes("@") &&
+            (normalized.includes("invalid credentials") || normalized.includes("invalid login or password"));
 
-          if (!primaryIsVolunteer && /invalid login or password/i.test(finalError.message)) {
-            try {
-              setBanner("No account found. Creating a citizen account automatically...");
-              const signupPayload = buildCitizenSignupFromLogin(identifier, input.password);
-              await registerCitizenAccount(signupPayload);
-              const signupAuth = await loginCitizenAccount({
-                identifier,
-                password: input.password
-              });
-              resolvedRole = String(signupAuth?.user?.role || "").toUpperCase();
-            } catch {
-              throw finalError;
-            }
-          } else {
-            throw finalError;
+          if (!canAutoCreateVolunteer) {
+            throw error;
           }
+
+          setBanner("No volunteer account found. Creating one automatically...");
+          try {
+            await registerVolunteerAccount({
+              fullName: deriveCitizenNameFromIdentifier(identifier),
+              email: identifier.toLowerCase(),
+              password: input.password
+            });
+          } catch (registerError) {
+            const registerRaw =
+              registerError instanceof Error ? registerError.message : String(registerError);
+            const registerNormalized = registerRaw.toLowerCase();
+            if (registerNormalized.includes("already registered")) {
+              throw new Error(
+                "This email is already registered as a citizen account. Use a different email for the volunteer, or ask the owner to log in with the correct password."
+              );
+            }
+            throw registerError;
+          }
+
+          authData = await loginVolunteerAccount({
+            identifier,
+            password: input.password
+          });
+        }
+      } else {
+        try {
+          authData = await loginCitizenAccount({
+            identifier,
+            password: input.password
+          });
+        } catch (error) {
+          const raw = error instanceof Error ? error.message : String(error);
+          const normalized = raw.toLowerCase();
+          const canAutoCreateCitizen =
+            identifier.includes("@") &&
+            (normalized.includes("invalid credentials") || normalized.includes("invalid login or password"));
+
+          if (!canAutoCreateCitizen) {
+            throw error;
+          }
+
+          setBanner("No account found. Creating a citizen account automatically...");
+          try {
+            await registerCitizenAccount({
+              fullName: deriveCitizenNameFromIdentifier(identifier),
+              email: identifier.toLowerCase(),
+              password: input.password
+            });
+          } catch (registerError) {
+            const registerRaw =
+              registerError instanceof Error ? registerError.message : String(registerError);
+            const registerNormalized = registerRaw.toLowerCase();
+            if (registerNormalized.includes("already registered")) {
+              throw new Error(
+                "This email is already registered. Please enter the correct password, or tap Back and use Create New Account with a different email."
+              );
+            }
+            throw registerError;
+          }
+          authData = await loginCitizenAccount({
+            identifier,
+            password: input.password
+          });
         }
       }
 
-      if (!resolvedRole) {
-        throw finalError ?? new Error("Login failed");
+      let resolvedRole = String(authData?.user?.role || "").toUpperCase();
+
+      if (accountType === "VOLUNTEER" && resolvedRole !== "VOLUNTEER" && resolvedRole !== "") {
+        setBanner("Upgrading this account to Volunteer...");
+        try {
+          const switched = await switchAccountRole({
+            identifier,
+            password: input.password,
+            newRole: "VOLUNTEER"
+          });
+          if (switched) {
+            authData = switched as typeof authData;
+            resolvedRole = String(authData?.user?.role || "").toUpperCase();
+          }
+        } catch (switchError) {
+          const switchRaw =
+            switchError instanceof Error ? switchError.message : String(switchError);
+          throw new Error(
+            `Could not switch this account to Volunteer. ${switchRaw}. Use a different email or sign in as Citizen.`
+          );
+        }
       }
 
-      // Route by actual server role — not by selected tile. (Old bug: Volunteer tile + citizen
-      // account used `primaryIsVolunteer` and always took the volunteer branch, so profile/API
-      // could misbehave and the UI felt "stuck" on sign-in.)
       if (resolvedRole === "VOLUNTEER") {
         setAccountType("VOLUNTEER");
         setAuthenticatedRole("VOLUNTEER");
         setAuthStage("authenticated");
+        setVolunteerTab("alerts");
+        setVolunteerFlow("incoming");
         setBanner("");
         try {
           const volunteerProfile = await getVolunteerProfile();
@@ -1526,16 +1608,15 @@ export default function App() {
         } catch {
           setVolunteerProfileState(defaultVolunteerProfile);
         }
-      } else {
-        if (accountType === "VOLUNTEER") {
-          throw new Error(
-            "This account is a citizen account, not a volunteer. Tap Back, choose Citizen, then sign in — or use Sign up to create a volunteer account."
-          );
-        }
+        return;
+      }
 
+      if (resolvedRole === "CITIZEN" || resolvedRole === "USER" || resolvedRole === "") {
         setAccountType("USER");
         setAuthenticatedRole("USER");
         setAuthStage("authenticated");
+        setTab("home");
+        setFlow("ready");
         setBanner("");
         try {
           const [userProfile, medicalProfile] = await Promise.all([
@@ -1560,7 +1641,10 @@ export default function App() {
             email: current.email
           }));
         }
+        return;
       }
+
+      throw new Error(`Unsupported account role: ${resolvedRole}`);
     };
 
     void (async () => {

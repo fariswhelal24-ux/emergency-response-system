@@ -104,7 +104,7 @@ export type CitizenEmergencyHistoryItem = {
 const REQUEST_TIMEOUT_MS = 10_000;
 const AUTH_REQUEST_TIMEOUT_MS = 10_000;
 const CHAT_REQUEST_TIMEOUT_MS = 35_000;
-const API_PORT = "4100";
+const DEFAULT_PRODUCTION_API_BASE_URL = "https://ersapi-production.up.railway.app/api/v1";
 const API_PATH = "/api/v1";
 
 /** Support both names; Metro injects EXPO_PUBLIC_API_BASE_URL from start-expo-with-api.mjs. */
@@ -274,12 +274,9 @@ const readExpoHosts = (): string[] => {
   return Array.from(hosts);
 };
 
-const buildApiBaseFromHost = (host: string): string => `http://${host}:${API_PORT}${API_PATH}`;
-
 const getApiBaseCandidates = (): string[] => {
   const normalizedEnvBase = normalizeApiBase(ENV_API_BASE_URL);
   const wsBase = normalizeSocketBase(ENV_WS_BASE_URL);
-  const expoHosts = readExpoHosts();
 
   const ordered: string[] = [];
   const pushUnique = (base: string | undefined) => {
@@ -289,16 +286,12 @@ const getApiBaseCandidates = (): string[] => {
     ordered.push(base);
   };
 
-  // Prefer explicit tunnel/LAN from Metro env (public QR) before stale workingApiBase or dead LAN fallbacks.
   pushUnique(normalizedEnvBase);
   if (wsBase) {
     pushUnique(`${wsBase}${API_PATH}`);
   }
   pushUnique(workingApiBase ?? undefined);
-
-  for (const host of expoHosts) {
-    pushUnique(buildApiBaseFromHost(host));
-  }
+  pushUnique(DEFAULT_PRODUCTION_API_BASE_URL);
 
   return ordered;
 };
@@ -492,7 +485,7 @@ const buildUnreachableApiError = (candidates: string[], errors: string[]): Error
   const attempts = errors.length > 0 ? errors.join(" | ") : "no network attempt";
 
   return new Error(
-    `Cannot reach emergency API. Configured bases: ${configured}. Attempts: ${attempts}. Set EXPO_PUBLIC_API_BASE_URL or EXPO_PUBLIC_API_URL to your tunnel (e.g. https://xxx.trycloudflare.com/api/v1) from pnpm run dev:public:unified.`
+    `Cannot reach emergency API. Configured bases: ${configured}. Attempts: ${attempts}. Set EXPO_PUBLIC_API_BASE_URL to your Railway API URL (example: https://ersapi-production.up.railway.app/api/v1).`
   );
 };
 
@@ -734,6 +727,32 @@ export const registerCitizenAccount = async (input: {
   return payload?.data;
 };
 
+export const switchAccountRole = async (input: {
+  identifier: string;
+  password: string;
+  newRole: "CITIZEN" | "VOLUNTEER";
+}) => {
+  const payload = await request<{ data?: { user?: { role?: string } } }>("/auth/switch-role", {
+    method: "POST",
+    body: JSON.stringify({
+      identifier: input.identifier.trim(),
+      password: input.password,
+      newRole: input.newRole
+    })
+  }, {
+    requireAuth: false,
+    timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
+    retryOnTimeout: true,
+    retryOnHttp408: true
+  });
+
+  const token = extractAccessToken(payload);
+  if (token) {
+    authToken = token;
+  }
+  return payload?.data;
+};
+
 export const getCitizenUserProfile = async (): Promise<CitizenUserProfile> => {
   const payload = await request<{ data: CitizenUserProfile }>("/users/me/profile", {
     method: "GET"
@@ -828,7 +847,7 @@ export const createEmergencyRequest = async (input: {
   ambulanceEtaMinutes?: number;
   volunteerEtaMinutes?: number;
 }): Promise<CitizenEmergencyCase & { location: EmergencyLocation }> => {
-  const payload = await request<{ data: CitizenEmergencyCase & { location: EmergencyLocation } }>("/emergency/create", {
+  const payload = await request<{ data: CitizenEmergencyCase & { location: EmergencyLocation } }>("/emergency/request", {
     method: "POST",
     body: JSON.stringify(input)
   });

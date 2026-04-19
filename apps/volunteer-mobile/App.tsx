@@ -54,6 +54,18 @@ const simplifyNetworkError = (message: string): string => {
   return text;
 };
 
+const deriveVolunteerNameFromIdentifier = (identifier: string): string => {
+  const base = identifier.split("@")[0]?.trim() || "Volunteer User";
+  const cleaned = base.replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!cleaned) {
+    return "Volunteer User";
+  }
+  return cleaned
+    .split(" ")
+    .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
+    .join(" ");
+};
+
 type GeoPoint = {
   latitude: number;
   longitude: number;
@@ -419,6 +431,7 @@ export default function App() {
     };
 
     const handleRealtimeEmergency = (payload: unknown) => {
+      console.log("[Volunteer] realtime emergency event received", payload);
       const incoming = toVolunteerEmergencyFromSocket(payload);
 
       if (incoming) {
@@ -450,6 +463,7 @@ export default function App() {
           }
         });
 
+        socket.on("new_request", handleRealtimeEmergency);
         socket.on("emergency_created", handleRealtimeEmergency);
         socket.on("volunteer_requested", handleRealtimeEmergency);
         socket.on("emergency:update", handleRealtimeEmergency);
@@ -606,10 +620,49 @@ export default function App() {
     setBanner("Signing in...");
 
     const loginTask = async () => {
-      const authData = await loginVolunteerAccount({
-        identifier: input.identifier.trim(),
-        password: input.password
-      });
+      const identifier = input.identifier.trim();
+      let authData;
+      try {
+        authData = await loginVolunteerAccount({
+          identifier,
+          password: input.password
+        });
+      } catch (error) {
+        const raw = error instanceof Error ? error.message : String(error);
+        const normalized = raw.toLowerCase();
+        const canAutoCreateVolunteer =
+          identifier.includes("@") &&
+          (normalized.includes("invalid credentials") || normalized.includes("invalid login or password"));
+
+        if (!canAutoCreateVolunteer) {
+          throw error;
+        }
+
+        setBanner("No volunteer account found. Creating one automatically...");
+        try {
+          await registerVolunteerAccount({
+            fullName: deriveVolunteerNameFromIdentifier(identifier),
+            email: identifier.toLowerCase(),
+            password: input.password
+          });
+        } catch (registerError) {
+          const registerRaw =
+            registerError instanceof Error ? registerError.message : String(registerError);
+          const registerNormalized = registerRaw.toLowerCase();
+          if (registerNormalized.includes("already registered")) {
+            throw new Error(
+              "This email is already registered. Please enter the correct password, or tap Back and Create New Account with a different email."
+            );
+          }
+          throw registerError;
+        }
+
+        authData = await loginVolunteerAccount({
+          identifier,
+          password: input.password
+        });
+      }
+
       const role = String(authData?.user?.role || "").toUpperCase();
       if (role === "CITIZEN" || role === "USER") {
         throw new Error(
@@ -622,6 +675,8 @@ export default function App() {
 
       setAuthenticatedRole("VOLUNTEER");
       setAuthStage("authenticated");
+      setTab("alerts");
+      setFlow("incoming");
       setBanner("");
 
       try {
@@ -635,13 +690,6 @@ export default function App() {
           responseRadiusKm: String(volunteerProfile.responseRadiusKm || 5)
         });
       } catch {
-        if (role === "") {
-          setAuthStage("login");
-          setAuthenticatedRole(null);
-          throw new Error(
-            "Could not load volunteer profile. You may be using a citizen account — use dev:public:unified QR, pick Volunteer, and register or log in as a volunteer."
-          );
-        }
         setVolunteerProfileState(defaultVolunteerProfile);
       }
     };

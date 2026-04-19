@@ -12,7 +12,7 @@ import {
 } from "../../shared/utils/token.js";
 import { emitVolunteerAvailabilityChanged } from "../../sockets/realtimeServer.js";
 import { authRepository, UserRecord, UserRole } from "./auth.repository.js";
-import { LoginInput, RegisterInput } from "./auth.validation.js";
+import { LoginInput, RegisterInput, SwitchRoleInput } from "./auth.validation.js";
 
 type PublicUser = {
   id: string;
@@ -175,6 +175,45 @@ export const authService = {
       console.error("[AUTH_SERVICE] login failed:", error);
       throw new AppError("Invalid credentials", 401, { error: "Invalid credentials" });
     }
+  },
+
+  switchRole: async (input: SwitchRoleInput) => {
+    const identifier = input.identifier.trim();
+    const isEmail = identifier.includes("@");
+    let user: UserRecord | null = null;
+
+    if (isEmail) {
+      user = await authRepository.findUserByEmail(identifier.toLowerCase());
+    } else if (isLikelyPalestinePhone(identifier)) {
+      const normalizedPhone = normalizePhone(identifier);
+      user = await authRepository.findUserByPhone(normalizedPhone);
+      if (!user && normalizedPhone !== identifier) {
+        user = await authRepository.findUserByPhone(identifier);
+      }
+    }
+
+    if (!user) {
+      throw new AppError("Invalid credentials", 401, { error: "Invalid credentials" });
+    }
+
+    const matches = await comparePassword(input.password, user.password_hash);
+    if (!matches) {
+      throw new AppError("Invalid credentials", 401, { error: "Invalid credentials" });
+    }
+
+    if (user.role === input.newRole) {
+      const tokens = await issueTokenPair(user);
+      return { user: toPublicUser(user), tokens };
+    }
+
+    const updated = await authRepository.updateUserRole(user.id, input.newRole);
+    if (!updated) {
+      throw new AppError("Could not update account role", 500);
+    }
+
+    await authRepository.bootstrapRoleProfile({ userId: updated.id, role: updated.role });
+    const tokens = await issueTokenPair(updated);
+    return { user: toPublicUser(updated), tokens };
   },
 
   refresh: async (refreshToken: string) => {

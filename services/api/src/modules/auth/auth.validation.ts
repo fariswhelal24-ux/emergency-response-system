@@ -23,6 +23,13 @@ export const refreshTokenSchema = z.object({
 
 export const logoutSchema = refreshTokenSchema;
 
+export const switchRoleSchema = z.object({
+  identifier: z.string().trim().min(3).max(120),
+  password: z.string().min(8).max(128),
+  newRole: roleSchema
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshInput = z.infer<typeof refreshTokenSchema>;
+export type SwitchRoleInput = z.infer<typeof switchRoleSchema>;

@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 
 import { AppError } from "../../shared/errors/AppError.js";
 import { authService } from "./auth.service.js";
-import { LoginInput, RefreshInput, RegisterInput } from "./auth.validation.js";
+import { LoginInput, RefreshInput, RegisterInput, SwitchRoleInput } from "./auth.validation.js";
 
 export const authController = {
   register: async (request: Request, response: Response): Promise<void> => {
@@ -21,6 +21,16 @@ export const authController = {
 
     response.json({
       message: "Login successful",
+      data: result
+    });
+  },
+
+  switchRole: async (request: Request, response: Response): Promise<void> => {
+    const payload = request.body as SwitchRoleInput;
+    const result = await authService.switchRole(payload);
+
+    response.json({
+      message: "Role updated",
       data: result
     });
   },

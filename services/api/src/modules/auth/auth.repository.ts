@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { db } from "../../database/pool.js";
 import { AppError } from "../../shared/errors/AppError.js";
 import { UserRole } from "../../shared/types/domain.js";
@@ -78,6 +76,19 @@ export const authRepository = {
     }
   },
 
+  updateUserRole: async (userId: string, role: UserRole): Promise<UserRecord | null> => {
+    try {
+      const query = await db.query<UserRecord>(
+        `UPDATE users SET role = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
+        [userId, role]
+      );
+      return query.rows[0] ?? null;
+    } catch (error) {
+      console.error("[AUTH_REPOSITORY] updateUserRole failed:", error);
+      throw new AppError("Could not update account role", 500);
+    }
+  },
+
   createUser: async (input: {
     fullName: string;
     email: string;
@@ -86,24 +97,19 @@ export const authRepository = {
     role: UserRole;
   }): Promise<UserRecord> => {
     try {
-      const newId = randomUUID();
       const query = await db.query<UserRecord>(
         `
-        INSERT INTO users (id, full_name, email, phone, password_hash, role)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO users (full_name, email, phone, password_hash, role)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
         `,
-        [newId, input.fullName, input.email, input.phone ?? null, input.passwordHash, input.role]
+        [input.fullName, input.email, input.phone ?? null, input.passwordHash, input.role]
       );
 
       return query.rows[0];
     } catch (error) {
       console.error("[AUTH_REPOSITORY] createUser failed:", error);
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new AppError("Could not create user account", 500, {
-        error: "Could not create user account",
-        reason
-      });
+      throw new AppError("Could not create user account", 500);
     }
   },
 

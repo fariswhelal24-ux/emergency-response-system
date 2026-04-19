@@ -8,13 +8,19 @@ import {
   loginSchema,
   logoutSchema,
   refreshTokenSchema,
-  registerSchema
+  registerSchema,
+  switchRoleSchema
 } from "./auth.validation.js";
 
 export const authRoutes = Router();
 
 authRoutes.post("/register", validateBody(registerSchema), asyncHandler(authController.register));
 authRoutes.post("/login", validateBody(loginSchema), asyncHandler(authController.login));
+authRoutes.post(
+  "/switch-role",
+  validateBody(switchRoleSchema),
+  asyncHandler(authController.switchRole)
+);
 authRoutes.post("/refresh", validateBody(refreshTokenSchema), asyncHandler(authController.refresh));
 authRoutes.post("/logout", validateBody(logoutSchema), asyncHandler(authController.logout));
 authRoutes.get("/me", authenticate, asyncHandler(authController.me));
