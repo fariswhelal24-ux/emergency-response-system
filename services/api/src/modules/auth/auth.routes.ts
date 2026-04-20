@@ -73,6 +73,149 @@ authRoutes.post(
 );
 
 authRoutes.post(
+  "/admin/prune-role",
+  asyncHandler(async (request: Request, response: Response): Promise<void> => {
+    const provided = request.header("x-admin-secret") || "";
+    if (!provided || provided !== ADMIN_WIPE_SECRET) {
+      response.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const bodyRole = typeof request.body?.role === "string" ? request.body.role.toUpperCase() : "";
+    const allowedRoles = new Set(["CITIZEN", "VOLUNTEER", "DISPATCHER", "ADMIN"]);
+    if (!allowedRoles.has(bodyRole)) {
+      response.status(400).json({
+        error: "Invalid role",
+        allowedRoles: [...allowedRoles]
+      });
+      return;
+    }
+
+    const rawKeep = Array.isArray(request.body?.keepEmails) ? request.body.keepEmails : [];
+    const keepEmails = rawKeep
+      .filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0)
+      .map((value: string) => value.trim().toLowerCase());
+
+    const selectSql = `SELECT id, email, full_name FROM users WHERE role = $1`;
+    const selected = await db.query<{ id: string; email: string | null; full_name: string }>(selectSql, [
+      bodyRole
+    ]);
+
+    const toDelete = selected.rows.filter(
+      (row) => !row.email || !keepEmails.includes(row.email.toLowerCase())
+    );
+    const kept = selected.rows.filter(
+      (row) => row.email && keepEmails.includes(row.email.toLowerCase())
+    );
+
+    const deletedIds = toDelete.map((row) => row.id);
+
+    const cascadeTables: Array<{ sql: string; key: string }> = [
+      {
+        sql: `DELETE FROM volunteer_assignments WHERE volunteer_id IN (
+                SELECT id FROM volunteers WHERE user_id = ANY($1::uuid[])
+              )`,
+        key: "volunteer_assignments"
+      },
+      {
+        sql: `DELETE FROM messages WHERE sender_user_id = ANY($1::uuid[]) OR recipient_user_id = ANY($1::uuid[])`,
+        key: "messages"
+      },
+      {
+        sql: `DELETE FROM live_locations WHERE user_id = ANY($1::uuid[])`,
+        key: "live_locations"
+      },
+      {
+        sql: `DELETE FROM location_updates WHERE user_id = ANY($1::uuid[])`,
+        key: "location_updates"
+      },
+      {
+        sql: `DELETE FROM emergency_updates WHERE author_user_id = ANY($1::uuid[])`,
+        key: "emergency_updates"
+      },
+      {
+        sql: `DELETE FROM volunteers WHERE user_id = ANY($1::uuid[])`,
+        key: "volunteers"
+      },
+      {
+        sql: `DELETE FROM medical_profiles WHERE user_id = ANY($1::uuid[])`,
+        key: "medical_profiles"
+      },
+      {
+        sql: `DELETE FROM dispatchers WHERE user_id = ANY($1::uuid[])`,
+        key: "dispatchers"
+      },
+      {
+        sql: `DELETE FROM refresh_tokens WHERE user_id = ANY($1::uuid[])`,
+        key: "refresh_tokens"
+      },
+      {
+        sql: `DELETE FROM users WHERE id = ANY($1::uuid[])`,
+        key: "users"
+      }
+    ];
+
+    const results: Record<string, number> = {};
+
+    if (deletedIds.length === 0) {
+      response.status(200).json({
+        message: "Nothing to delete",
+        role: bodyRole,
+        keptEmails: kept.map((row) => row.email),
+        deletedEmails: [],
+        counts: results
+      });
+      return;
+    }
+
+    for (const step of cascadeTables) {
+      try {
+        const result = await db.query(step.sql, [deletedIds]);
+        results[step.key] = result.rowCount ?? 0;
+      } catch (error) {
+        results[step.key] = -1;
+        console.warn(`[ADMIN_PRUNE] Failed step ${step.key}:`, error);
+      }
+    }
+
+    response.status(200).json({
+      message: `Pruned users with role ${bodyRole}`,
+      role: bodyRole,
+      keptEmails: kept.map((row) => row.email),
+      deletedEmails: toDelete.map((row) => row.email),
+      counts: results
+    });
+  })
+);
+
+authRoutes.get(
+  "/admin/list-role",
+  asyncHandler(async (request: Request, response: Response): Promise<void> => {
+    const provided = request.header("x-admin-secret") || "";
+    if (!provided || provided !== ADMIN_WIPE_SECRET) {
+      response.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    const role = typeof request.query.role === "string" ? request.query.role.toUpperCase() : "";
+    const allowedRoles = new Set(["CITIZEN", "VOLUNTEER", "DISPATCHER", "ADMIN"]);
+    if (!allowedRoles.has(role)) {
+      response.status(400).json({ error: "Invalid role", allowedRoles: [...allowedRoles] });
+      return;
+    }
+    const result = await db.query<{
+      id: string;
+      email: string | null;
+      full_name: string;
+      created_at: string;
+    }>(
+      `SELECT id, email, full_name, created_at FROM users WHERE role = $1 ORDER BY created_at DESC`,
+      [role]
+    );
+    response.status(200).json({ role, count: result.rowCount ?? 0, users: result.rows });
+  })
+);
+
+authRoutes.post(
   "/admin/repair-schema",
   asyncHandler(async (request: Request, response: Response): Promise<void> => {
     const provided = request.header("x-admin-secret") || "";
