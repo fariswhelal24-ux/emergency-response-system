@@ -30,7 +30,7 @@ export type MedicalChatResult = {
 const REQUEST_TIMEOUT_MS = 10_000;
 const AUTH_REQUEST_TIMEOUT_MS = 10_000;
 const CHAT_REQUEST_TIMEOUT_MS = 35_000;
-const API_PORT = "4100";
+const DEFAULT_PRODUCTION_API_BASE_URL = "https://ersapi-production.up.railway.app/api/v1";
 const API_PATH = "/api/v1";
 
 const ENV_API_BASE_URL =
@@ -199,10 +199,8 @@ const readExpoHosts = (): string[] => {
 };
 
 const getApiBaseCandidates = (): string[] => {
-  const expoHosts = readExpoHosts();
   const normalizedEnvBase = normalizeApiBase(ENV_API_BASE_URL);
   const normalizedWsBase = normalizeSocketBase(ENV_WS_BASE_URL);
-  const webHost = trim((globalThis as { location?: { hostname?: string } }).location?.hostname);
 
   const ordered: string[] = [];
   const pushUnique = (base: string | undefined) => {
@@ -217,14 +215,7 @@ const getApiBaseCandidates = (): string[] => {
     pushUnique(`${normalizedWsBase}${API_PATH}`);
   }
   pushUnique(workingApiBase ?? undefined);
-
-  for (const host of expoHosts) {
-    pushUnique(`http://${host}:${API_PORT}${API_PATH}`);
-  }
-
-  if (webHost && !isLoopbackHost(webHost) && !isPlaceholderHost(webHost)) {
-    pushUnique(`http://${webHost}:${API_PORT}${API_PATH}`);
-  }
+  pushUnique(DEFAULT_PRODUCTION_API_BASE_URL);
 
   return ordered;
 };
@@ -415,7 +406,7 @@ const buildUnreachableApiError = (bases: string[], errors: string[]): Error => {
   const attempts = errors.length > 0 ? errors.join(" | ") : "no network attempt";
 
   return new Error(
-    `Cannot reach API server. Configured bases: ${configured}. Attempts: ${attempts}. Set EXPO_PUBLIC_API_BASE_URL or EXPO_PUBLIC_API_URL (tunnel URL from dev:public:unified / dev:public:volunteer-app).`
+    `Cannot reach API server. Configured bases: ${configured}. Attempts: ${attempts}. Set EXPO_PUBLIC_API_BASE_URL to your Railway API URL (example: https://ersapi-production.up.railway.app/api/v1).`
   );
 };
 
@@ -753,7 +744,7 @@ export const initVolunteerEmergencyCall = async (input: {
 };
 
 export const fetchLatestVolunteerEmergency = async (): Promise<VolunteerEmergencyCase | null> => {
-  const result = await request<{ data?: VolunteerEmergencyCase[] }>("/emergencies?limit=1&offset=0");
+  const result = await request<{ data?: VolunteerEmergencyCase[] }>("/emergency/active?limit=1&offset=0");
   const latest = Array.isArray(result?.data) ? result.data[0] : null;
 
   if (!latest) {
@@ -1069,4 +1060,40 @@ export const sendMedicalChatMessage = async (
   }
 
   return buildMedicalChatFallback(messages);
+};
+
+export type RouteCoordinate = { latitude: number; longitude: number };
+export type RoutePayload = {
+  from: RouteCoordinate;
+  to: RouteCoordinate;
+  mode: "fastest" | "shortest";
+  provider: "mapbox" | "osrm" | "linear";
+  trafficAware: boolean;
+  distanceKm: number;
+  durationMinutes: number;
+  geometry: RouteCoordinate[];
+};
+
+export const fetchRoute = async (
+  from: RouteCoordinate,
+  to: RouteCoordinate,
+  options: { mode?: "fastest" | "shortest"; avoidTraffic?: boolean } = {}
+): Promise<RoutePayload | null> => {
+  try {
+    const params = new URLSearchParams({
+      fromLat: String(from.latitude),
+      fromLng: String(from.longitude),
+      toLat: String(to.latitude),
+      toLng: String(to.longitude),
+      mode: options.mode ?? "fastest",
+      avoidTraffic: String(options.avoidTraffic ?? true)
+    });
+    const payload = await request<{ data: RoutePayload }>(`/routing/route?${params.toString()}`, {
+      method: "GET"
+    });
+    return payload.data;
+  } catch (error) {
+    console.warn("VOLUNTEER routing fetch failed, falling back to linear", error);
+    return null;
+  }
 };

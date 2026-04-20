@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { IncidentMap } from "../components/IncidentMap";
 import { Card, GhostButton, PrimaryButton, ScreenShell, SectionTitle } from "../components/Ui";
+import { fetchRoute, type RouteCoordinate } from "../services/api";
 import { colors, radius, spacing } from "../theme/tokens";
 
 export const AcceptedScreen = ({
@@ -23,6 +25,58 @@ export const AcceptedScreen = ({
   onStartProgress: () => void;
 }) => {
   const equipmentChecklist = ["Gloves", "Gauze", "Pulse oximeter", "Portable airway kit"];
+
+  const [routeGeometry, setRouteGeometry] = useState<RouteCoordinate[] | undefined>(undefined);
+  const [routeMeta, setRouteMeta] = useState<{
+    provider: string;
+    distanceKm: number;
+    durationMinutes: number;
+    trafficAware: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fromCoord = emergency.volunteerLocation;
+    const toCoord = emergency.patientLocation;
+    if (!fromCoord || !toCoord) {
+      setRouteGeometry(undefined);
+      setRouteMeta(null);
+      return;
+    }
+    (async () => {
+      const route = await fetchRoute(fromCoord, toCoord, { mode: "fastest", avoidTraffic: true });
+      if (cancelled) {
+        return;
+      }
+      if (route && route.geometry.length > 1) {
+        setRouteGeometry(route.geometry);
+        setRouteMeta({
+          provider: route.provider,
+          distanceKm: route.distanceKm,
+          durationMinutes: route.durationMinutes,
+          trafficAware: route.trafficAware
+        });
+      } else {
+        setRouteGeometry(undefined);
+        setRouteMeta(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    emergency.volunteerLocation?.latitude,
+    emergency.volunteerLocation?.longitude,
+    emergency.patientLocation?.latitude,
+    emergency.patientLocation?.longitude
+  ]);
+
+  const mapMeta = routeMeta
+    ? `Fastest route • ${routeMeta.distanceKm.toFixed(1)} km • ${routeMeta.durationMinutes} min${
+        routeMeta.trafficAware ? " (traffic-aware)" : ""
+      }`
+    : "Patient location pinned • Ambulance en route";
+
   return (
     <ScreenShell>
       <Card>
@@ -30,12 +84,13 @@ export const AcceptedScreen = ({
 
         <Card style={styles.mapCard}>
           <Text style={styles.mapTitle}>Navigation Route Active</Text>
-          <Text style={styles.mapMeta}>Patient location pinned • Ambulance en route</Text>
+          <Text style={styles.mapMeta}>{mapMeta}</Text>
           <View style={styles.mapWrap}>
             <IncidentMap
               patientLocation={emergency.patientLocation}
               volunteerLocation={emergency.volunteerLocation}
               ambulanceLocation={emergency.ambulanceLocation}
+              routeGeometry={routeGeometry}
             />
           </View>
         </Card>

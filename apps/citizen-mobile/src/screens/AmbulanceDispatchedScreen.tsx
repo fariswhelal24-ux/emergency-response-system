@@ -64,6 +64,7 @@ type CitizenLiveTrackingState = {
   ambulanceLocation?: LiveCoordinate & { etaMinutes?: number };
   citizenLocation?: LiveCoordinate;
   ambulanceRoute?: LiveCoordinate[];
+  volunteerRoute?: LiveCoordinate[];
   syncState: "connecting" | "connected" | "offline";
 };
 
@@ -190,6 +191,7 @@ export const AmbulanceDispatchedScreen = ({
             volunteerLocation={liveTracking.volunteerLocation}
             ambulanceLocation={liveTracking.ambulanceLocation}
             ambulanceRoute={liveTracking.ambulanceRoute}
+            volunteerRoute={liveTracking.volunteerRoute}
           />
         </CardSurface>
 

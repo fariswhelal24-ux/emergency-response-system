@@ -1129,3 +1129,39 @@ export const sendMedicalChatMessage = async (
 // Backward-compatible aliases
 export const getProfile = getCitizenUserProfile;
 export const createEmergency = createEmergencyRequest;
+
+export type RouteCoordinate = { latitude: number; longitude: number };
+export type RoutePayload = {
+  from: RouteCoordinate;
+  to: RouteCoordinate;
+  mode: "fastest" | "shortest";
+  provider: "mapbox" | "osrm" | "linear";
+  trafficAware: boolean;
+  distanceKm: number;
+  durationMinutes: number;
+  geometry: RouteCoordinate[];
+};
+
+export const fetchRoute = async (
+  from: RouteCoordinate,
+  to: RouteCoordinate,
+  options: { mode?: "fastest" | "shortest"; avoidTraffic?: boolean } = {}
+): Promise<RoutePayload | null> => {
+  try {
+    const params = new URLSearchParams({
+      fromLat: String(from.latitude),
+      fromLng: String(from.longitude),
+      toLat: String(to.latitude),
+      toLng: String(to.longitude),
+      mode: options.mode ?? "fastest",
+      avoidTraffic: String(options.avoidTraffic ?? true)
+    });
+    const payload = await request<{ data: RoutePayload }>(`/routing/route?${params.toString()}`, {
+      method: "GET"
+    });
+    return payload.data;
+  } catch (error) {
+    console.warn("CITIZEN routing fetch failed, falling back to linear", error);
+    return null;
+  }
+};

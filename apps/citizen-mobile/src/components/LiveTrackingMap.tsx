@@ -61,12 +61,14 @@ export const LiveTrackingMap = ({
   patientLocation,
   volunteerLocation,
   ambulanceLocation,
-  ambulanceRoute
+  ambulanceRoute,
+  volunteerRoute
 }: {
   patientLocation?: Coordinate;
   volunteerLocation?: Coordinate;
   ambulanceLocation?: Coordinate;
   ambulanceRoute?: Coordinate[];
+  volunteerRoute?: Coordinate[];
 }) => {
   const isExpoGo = Constants.appOwnership === "expo";
 
@@ -99,9 +101,9 @@ export const LiveTrackingMap = ({
   }, [ambulanceLocation, patientLocation, volunteerLocation]);
 
   const initialRegion = useMemo(() => {
-    const routePoints = ambulanceRoute ?? [];
+    const routePoints = [...(ambulanceRoute ?? []), ...(volunteerRoute ?? [])];
     return toRegion([...points, ...routePoints]);
-  }, [ambulanceRoute, points]);
+  }, [ambulanceRoute, points, volunteerRoute]);
 
   if (!mapsModule?.default || !mapsModule?.Marker || !mapsModule?.Polyline) {
     return (
@@ -131,6 +133,10 @@ export const LiveTrackingMap = ({
         showsMyLocationButton={false}
         toolbarEnabled={false}
       >
+        {volunteerRoute && volunteerRoute.length > 1 ? (
+          <Polyline coordinates={volunteerRoute} strokeColor="#1E88E5" strokeWidth={4} />
+        ) : null}
+
         {ambulanceRoute && ambulanceRoute.length > 1 ? (
           <Polyline coordinates={ambulanceRoute} strokeColor="#2E7D32" strokeWidth={4} />
         ) : null}

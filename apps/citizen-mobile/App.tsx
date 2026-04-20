@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { io, Socket } from "socket.io-client";
 
-const APP_BUILD_TAG = "v2.3.0-strict-roles-2026-04-19";
+const APP_BUILD_TAG = "v2.3.1-accurate-errors-2026-04-20";
 
 import { BottomNav as VolunteerBottomNav } from "../volunteer-mobile/src/components/BottomNav";
 import {
@@ -38,6 +38,7 @@ import { BottomNav } from "./src/components/BottomNav";
 import {
   createEmergencyRequest,
   ensureCitizenAuthToken,
+  fetchRoute,
   getCitizenEmergencyById,
   getCitizenMedicalProfile,
   getCitizenUserProfile,
@@ -167,6 +168,7 @@ type CitizenLiveTracking = {
   ambulanceLocation?: CaseCoordinate & { etaMinutes?: number };
   citizenLocation?: CaseCoordinate;
   ambulanceRoute?: CaseCoordinate[];
+  volunteerRoute?: CaseCoordinate[];
   syncState: "connecting" | "connected" | "offline";
 };
 
@@ -341,6 +343,37 @@ export default function App() {
     citizenLocation: DEFAULT_BETHLEHEM_LOCATION,
     syncState: "offline"
   });
+
+  useEffect(() => {
+    const volunteer = trackingState.volunteerLocation;
+    const patient = trackingState.citizenLocation;
+    if (!volunteer || !patient) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const route = await fetchRoute(
+        { latitude: volunteer.latitude, longitude: volunteer.longitude },
+        { latitude: patient.latitude, longitude: patient.longitude },
+        { mode: "fastest", avoidTraffic: true }
+      );
+      if (cancelled || !route || route.geometry.length < 2) {
+        return;
+      }
+      setTrackingState((current) => ({
+        ...current,
+        volunteerRoute: route.geometry
+      }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    trackingState.volunteerLocation?.latitude,
+    trackingState.volunteerLocation?.longitude,
+    trackingState.citizenLocation?.latitude,
+    trackingState.citizenLocation?.longitude
+  ]);
   const [activeCaseSnapshot, setActiveCaseSnapshot] = useState<CitizenCaseSnapshot>(defaultCitizenCaseSnapshot);
   const [citizenHistory, setCitizenHistory] = useState<
     Array<{ id: string; dateTime: string; emergencyType: string; address: string; status: string }>
@@ -1582,7 +1615,7 @@ export default function App() {
             const registerNormalized = registerRaw.toLowerCase();
             if (registerNormalized.includes("already registered")) {
               throw new Error(
-                "This email is already registered as a Citizen account. Please use a different email for Volunteer, or tap Back and log in as Citizen."
+                "This email is already registered. Please enter the correct password. If it belongs to a Citizen account, tap Back and log in from the Citizen tab instead."
               );
             }
             throw registerError;
@@ -1623,7 +1656,7 @@ export default function App() {
             const registerNormalized = registerRaw.toLowerCase();
             if (registerNormalized.includes("already registered")) {
               throw new Error(
-                "This email is already registered as a Volunteer account. Please use a different email for Citizen, or tap Back and log in as Volunteer."
+                "This email is already registered. Please enter the correct password. If it belongs to a Volunteer account, tap Back and log in from the Volunteer tab instead."
               );
             }
             throw registerError;

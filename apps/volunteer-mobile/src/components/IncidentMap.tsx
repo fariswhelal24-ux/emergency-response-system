@@ -55,11 +55,13 @@ const createRegion = (points: Coordinate[]): Region => {
 export const IncidentMap = ({
   patientLocation,
   volunteerLocation,
-  ambulanceLocation
+  ambulanceLocation,
+  routeGeometry
 }: {
   patientLocation?: Coordinate;
   volunteerLocation?: Coordinate;
   ambulanceLocation?: Coordinate;
+  routeGeometry?: Coordinate[];
 }) => {
   const isExpoGo = Constants.appOwnership === "expo";
 
@@ -108,14 +110,20 @@ export const IncidentMap = ({
     return next;
   }, [ambulanceLocation, patientLocation, volunteerLocation]);
 
-  const region = useMemo(() => createRegion(markers.map((item) => item.coordinate)), [markers]);
+  const region = useMemo(
+    () => createRegion([...markers.map((item) => item.coordinate), ...(routeGeometry ?? [])]),
+    [markers, routeGeometry]
+  );
 
   const volunteerToPatientLine = useMemo(() => {
+    if (routeGeometry && routeGeometry.length > 1) {
+      return routeGeometry;
+    }
     if (!volunteerLocation || !patientLocation) {
       return [];
     }
     return [volunteerLocation, patientLocation];
-  }, [patientLocation, volunteerLocation]);
+  }, [patientLocation, routeGeometry, volunteerLocation]);
 
   if (!mapsModule?.default || !mapsModule?.Marker || !mapsModule?.Polyline) {
     return (
@@ -143,7 +151,7 @@ export const IncidentMap = ({
         provider={Platform.OS === "android" ? providerGoogle : undefined}
         toolbarEnabled={false}
       >
-        {volunteerToPatientLine.length === 2 ? (
+        {volunteerToPatientLine.length >= 2 ? (
           <Polyline coordinates={volunteerToPatientLine} strokeColor="#1E88E5" strokeWidth={4} />
         ) : null}
         {markers.map((item) => (
