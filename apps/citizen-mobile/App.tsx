@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { io, Socket } from "socket.io-client";
 
-const APP_BUILD_TAG = "v2.2.0-fulltables-2026-04-19";
+const APP_BUILD_TAG = "v2.3.0-strict-roles-2026-04-19";
 
 import { BottomNav as VolunteerBottomNav } from "../volunteer-mobile/src/components/BottomNav";
 import {
@@ -1582,7 +1582,7 @@ export default function App() {
             const registerNormalized = registerRaw.toLowerCase();
             if (registerNormalized.includes("already registered")) {
               throw new Error(
-                "This email is already registered as a citizen account. Use a different email for the volunteer, or ask the owner to log in with the correct password."
+                "This email is already registered as a Citizen account. Please use a different email for Volunteer, or tap Back and log in as Citizen."
               );
             }
             throw registerError;
@@ -1623,7 +1623,7 @@ export default function App() {
             const registerNormalized = registerRaw.toLowerCase();
             if (registerNormalized.includes("already registered")) {
               throw new Error(
-                "This email is already registered. Please enter the correct password, or tap Back and use Create New Account with a different email."
+                "This email is already registered as a Volunteer account. Please use a different email for Citizen, or tap Back and log in as Volunteer."
               );
             }
             throw registerError;
@@ -1635,27 +1635,18 @@ export default function App() {
         }
       }
 
-      let resolvedRole = String(authData?.user?.role || "").toUpperCase();
+      const resolvedRole = String(authData?.user?.role || "").toUpperCase();
 
-      if (accountType === "VOLUNTEER" && resolvedRole !== "VOLUNTEER" && resolvedRole !== "") {
-        setBanner("Upgrading this account to Volunteer...");
-        try {
-          const switched = await switchAccountRole({
-            identifier,
-            password: input.password,
-            newRole: "VOLUNTEER"
-          });
-          if (switched) {
-            authData = switched as typeof authData;
-            resolvedRole = String(authData?.user?.role || "").toUpperCase();
-          }
-        } catch (switchError) {
-          const switchRaw =
-            switchError instanceof Error ? switchError.message : String(switchError);
-          throw new Error(
-            `Could not switch this account to Volunteer. ${switchRaw}. Use a different email or sign in as Citizen.`
-          );
-        }
+      if (accountType === "VOLUNTEER" && resolvedRole && resolvedRole !== "VOLUNTEER") {
+        throw new Error(
+          "This email is registered as a Citizen account. Please tap Back, choose Citizen, and log in there — or use a different email for Volunteer."
+        );
+      }
+
+      if (accountType === "USER" && resolvedRole && resolvedRole !== "CITIZEN" && resolvedRole !== "USER") {
+        throw new Error(
+          "This email is registered as a Volunteer account. Please tap Back, choose Volunteer, and log in there — or use a different email for Citizen."
+        );
       }
 
       if (resolvedRole === "VOLUNTEER") {
