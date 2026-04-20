@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
-import Constants from "expo-constants";
 
 type Region = {
   latitude: number;
@@ -63,21 +62,16 @@ export const IncidentMap = ({
   ambulanceLocation?: Coordinate;
   routeGeometry?: Coordinate[];
 }) => {
-  const isExpoGo = Constants.appOwnership === "expo";
-
   const mapsModule = useMemo(() => {
-    if (isExpoGo) {
-      return null;
-    }
     try {
-      // `react-native-maps` may be unavailable in Expo Go runtime.
+      // react-native-maps works in Expo Go for SDK 50+.
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const maps = require("react-native-maps");
       return maps;
     } catch {
       return null;
     }
-  }, [isExpoGo]);
+  }, []);
 
   const markers = useMemo(() => {
     const next: Array<{ key: string; coordinate: Coordinate; title: string; pinColor: string }> = [];
