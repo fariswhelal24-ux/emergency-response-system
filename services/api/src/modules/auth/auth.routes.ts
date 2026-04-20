@@ -1,6 +1,7 @@
 import { Request, Response, Router } from "express";
 
 import { db } from "../../database/pool.js";
+import { initDatabase } from "../../database/init.js";
 import { authenticate } from "../../middlewares/authenticate.js";
 import { validateBody } from "../../middlewares/validate.js";
 import { asyncHandler } from "../../shared/utils/asyncHandler.js";
@@ -68,5 +69,26 @@ authRoutes.post(
       message: "All test accounts and related data deleted",
       deleted: deletedTables
     });
+  })
+);
+
+authRoutes.post(
+  "/admin/repair-schema",
+  asyncHandler(async (request: Request, response: Response): Promise<void> => {
+    const provided = request.header("x-admin-secret") || "";
+    if (!provided || provided !== ADMIN_WIPE_SECRET) {
+      response.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    try {
+      await initDatabase();
+      response.status(200).json({ message: "Schema repaired" });
+    } catch (error) {
+      response.status(500).json({
+        error: "Schema repair failed",
+        reason: error instanceof Error ? error.message : String(error)
+      });
+    }
   })
 );

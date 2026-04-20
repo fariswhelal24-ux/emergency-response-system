@@ -9,6 +9,20 @@ const __dirname = path.dirname(__filename);
 
 const BOOT_TABLE_DEFINITIONS: string[] = [
   `CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`,
+  `DO $$
+   DECLARE current_id_type text;
+   BEGIN
+     SELECT data_type INTO current_id_type
+     FROM information_schema.columns
+     WHERE table_name = 'ambulances' AND column_name = 'id';
+
+     IF current_id_type IS NOT NULL AND current_id_type <> 'uuid' THEN
+       RAISE NOTICE 'Legacy ambulances.id type detected (%), resetting dependent tables', current_id_type;
+       DROP TABLE IF EXISTS ambulance_assignments CASCADE;
+       DROP TABLE IF EXISTS live_locations CASCADE;
+       DROP TABLE IF EXISTS ambulances CASCADE;
+     END IF;
+   END $$`,
   `DO $$ BEGIN
     CREATE TYPE user_role AS ENUM ('CITIZEN', 'VOLUNTEER', 'DISPATCHER', 'AMBULANCE_CREW', 'ADMIN');
   EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
