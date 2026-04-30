@@ -742,12 +742,34 @@ export const emergencyService = {
       throw new AppError("Volunteer profile not found", 404);
     }
 
-    const assignment = input.assignmentId
+    let assignment = input.assignmentId
       ? await emergencyRepository.findVolunteerAssignmentById(input.assignmentId)
       : await emergencyRepository.findVolunteerAssignmentByCase({ caseId, volunteerId });
 
+    // Self-claim: if volunteer received the broadcast alert but no formal
+    // assignment exists yet (no dispatcher intervention), allow them to
+    // claim the case directly by creating an assignment on the fly.
     if (!assignment) {
-      throw new AppError("Volunteer assignment not found", 404);
+      const caseExists = await emergencyRepository.findCaseById(caseId);
+      if (!caseExists) {
+        throw new AppError("Emergency case not found", 404);
+      }
+
+      if (!input.accepted) {
+        // Nothing to decline if no assignment existed.
+        return {
+          case: toCaseDto(caseExists),
+          assignment: null
+        };
+      }
+
+      assignment = await emergencyRepository.assignVolunteer({
+        caseId,
+        volunteerId,
+        assignedByUserId: auth.userId,
+        etaMinutes: input.etaMinutes,
+        distanceKm: undefined
+      });
     }
 
     if (assignment.case_id !== caseId) {
