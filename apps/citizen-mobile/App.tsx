@@ -86,6 +86,7 @@ type VolunteerSocketEmergency = {
   transcriptionText: string | null;
   aiAnalysis: string | null;
   callerDetailsPending?: boolean;
+  createdAt?: string | null;
   location: CaseCoordinate;
 };
 
@@ -155,6 +156,7 @@ const toVolunteerEmergencyFromSocket = (payload: unknown): VolunteerSocketEmerge
     transcriptionText: toText(casePayload.transcriptionText),
     aiAnalysis: toText(casePayload.aiAnalysis),
     callerDetailsPending: casePayload.callerDetailsPending === true,
+    createdAt: toText(casePayload.createdAt),
     location: {
       latitude,
       longitude
@@ -402,6 +404,13 @@ export default function App() {
   >([]);
   const lastSyncedVolunteerCaseIdRef = useRef<string>("");
   const lastVolunteerCallerDetailsPendingRef = useRef(false);
+  /**
+   * Wall-clock millisecond timestamp captured when the volunteer authenticated.
+   * Cases created before this timestamp are treated as stale on the alerts feed
+   * (we won't auto-pop them as a new notification on login). Cases the volunteer
+   * has already taken ownership of (flow === accepted/inProgress) bypass this.
+   */
+  const volunteerLoginTimestampRef = useRef<number>(0);
   const volunteerSocketRef = useRef<Socket | null>(null);
   const volunteerPositionRef = useRef<CaseCoordinate | null>(null);
   const citizenLocationRef = useRef<CaseCoordinate>(DEFAULT_BETHLEHEM_LOCATION);
@@ -1243,6 +1252,20 @@ export default function App() {
   }, [updateBusy]);
 
   useEffect(() => {
+    if (authStage === "authenticated" && authenticatedRole === "VOLUNTEER") {
+      // Mark when this volunteer started this session. Used to suppress
+      // alerts for cases that were already pending in the system before
+      // they signed in (we only want notifications for cases that arrive
+      // after the volunteer is actively watching the alerts feed).
+      if (volunteerLoginTimestampRef.current === 0) {
+        volunteerLoginTimestampRef.current = Date.now();
+      }
+    } else {
+      volunteerLoginTimestampRef.current = 0;
+    }
+  }, [authStage, authenticatedRole]);
+
+  useEffect(() => {
     if (authStage !== "authenticated" || authenticatedRole !== "VOLUNTEER") {
       return;
     }
@@ -1265,6 +1288,20 @@ export default function App() {
 
       if (cancelled) {
         return;
+      }
+
+      if (incoming) {
+        const createdAtMs = incoming.createdAt ? Date.parse(incoming.createdAt) : NaN;
+        const isStaleOnLogin =
+          Number.isFinite(createdAtMs) &&
+          createdAtMs < volunteerLoginTimestampRef.current;
+        const isOurActiveCase =
+          volunteerEmergencyState.caseId === incoming.id &&
+          (volunteerFlow === "accepted" || volunteerFlow === "inProgress");
+
+        if (isStaleOnLogin && !isOurActiveCase) {
+          incoming = null;
+        }
       }
 
       if (!incoming) {
@@ -1292,7 +1329,14 @@ export default function App() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [authStage, authenticatedRole, applyVolunteerEmergencyState, volunteerFlow, volunteerHasActiveEmergency]);
+  }, [
+    authStage,
+    authenticatedRole,
+    applyVolunteerEmergencyState,
+    volunteerFlow,
+    volunteerHasActiveEmergency,
+    volunteerEmergencyState.caseId
+  ]);
 
   useEffect(() => {
     if (authStage !== "authenticated" || authenticatedRole !== "VOLUNTEER") {
@@ -1375,6 +1419,20 @@ export default function App() {
         return;
       }
 
+      if (incoming) {
+        const createdAtMs = incoming.createdAt ? Date.parse(incoming.createdAt) : NaN;
+        const isStaleOnLogin =
+          Number.isFinite(createdAtMs) &&
+          createdAtMs < volunteerLoginTimestampRef.current;
+        const isOurActiveCase =
+          volunteerEmergencyState.caseId === incoming.id &&
+          (volunteerFlow === "accepted" || volunteerFlow === "inProgress");
+
+        if (isStaleOnLogin && !isOurActiveCase) {
+          incoming = null;
+        }
+      }
+
       if (!incoming) {
         // Keep alert visible until volunteer explicitly accepts/rejects.
         if (volunteerFlow === "incoming" && volunteerHasActiveEmergency) {
@@ -1396,8 +1454,18 @@ export default function App() {
       console.log("[Volunteer] realtime emergency event received", payload);
       const incoming = toVolunteerEmergencyFromSocket(payload);
       if (incoming) {
-        applyVolunteerEmergencyState(incoming);
-        socket?.emit("case:join", incoming.id);
+        const createdAtMs = incoming.createdAt ? Date.parse(incoming.createdAt) : NaN;
+        const isStaleOnLogin =
+          Number.isFinite(createdAtMs) &&
+          createdAtMs < volunteerLoginTimestampRef.current;
+        const isOurActiveCase =
+          volunteerEmergencyState.caseId === incoming.id &&
+          (volunteerFlow === "accepted" || volunteerFlow === "inProgress");
+
+        if (!isStaleOnLogin || isOurActiveCase) {
+          applyVolunteerEmergencyState(incoming);
+          socket?.emit("case:join", incoming.id);
+        }
       }
 
       void syncVolunteerCaseFromSocket();

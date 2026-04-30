@@ -701,6 +701,8 @@ export type VolunteerEmergencyCase = {
   riskLevel: string | null;
   /** True until dispatcher saves case details (voice/AI form); volunteers should wait before accepting. */
   callerDetailsPending?: boolean;
+  /** ISO timestamp the case was first created on the server. Used by clients to ignore stale alerts on login. */
+  createdAt?: string | null;
   location: {
     latitude: number;
     longitude: number;
@@ -766,6 +768,7 @@ export const fetchLatestVolunteerEmergency = async (): Promise<VolunteerEmergenc
     possibleCondition: latest.possibleCondition ?? null,
     riskLevel: latest.riskLevel ?? null,
     callerDetailsPending: Boolean((latest as { callerDetailsPending?: boolean }).callerDetailsPending),
+    createdAt: (latest as { createdAt?: string | null }).createdAt ?? null,
     location: {
       latitude: Number(latest.location?.latitude ?? 0),
       longitude: Number(latest.location?.longitude ?? 0)
