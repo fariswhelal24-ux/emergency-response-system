@@ -383,7 +383,28 @@ export default function App() {
   >([]);
 
   const [volunteerTab, setVolunteerTab] = useState<VolunteerTab>("alerts");
-  const [volunteerFlow, setVolunteerFlow] = useState<VolunteerFlow>("incoming");
+  const [volunteerFlow, setVolunteerFlowState] = useState<VolunteerFlow>("incoming");
+  /**
+   * Mirror of `volunteerFlow` so async work (poller, socket handlers, the
+   * `applyVolunteerEmergencyState` callback) can read the latest flow without
+   * relying on stale closures. Updated synchronously by `setVolunteerFlow`.
+   */
+  const volunteerFlowRef = useRef<VolunteerFlow>("incoming");
+  /**
+   * Wraps setVolunteerFlowState so the latest flow is also written to
+   * `volunteerFlowRef` synchronously on the same call. This guarantees that
+   * any async sync running immediately after the volunteer taps Accept will
+   * already see the new flow when it reads the ref, even before React has
+   * committed the state update.
+   */
+  const setVolunteerFlow = useCallback<typeof setVolunteerFlowState>((updater) => {
+    setVolunteerFlowState((prev) => {
+      const next =
+        typeof updater === "function" ? (updater as (value: VolunteerFlow) => VolunteerFlow)(prev) : updater;
+      volunteerFlowRef.current = next;
+      return next;
+    });
+  }, []);
   const [volunteerAvailable, setVolunteerAvailable] = useState(true);
   const [volunteerBanner, setVolunteerBanner] = useState("");
   const [volunteerCaseVersion, setVolunteerCaseVersion] = useState(0);
@@ -446,6 +467,37 @@ export default function App() {
     const isNewCase = lastSyncedVolunteerCaseIdRef.current !== incoming.id;
     const sameCase = lastSyncedVolunteerCaseIdRef.current === incoming.id;
     const wasPending = lastVolunteerCallerDetailsPendingRef.current;
+    const currentFlow = volunteerFlowRef.current;
+    const isMidResponse =
+      sameCase && (currentFlow === "accepted" || currentFlow === "inProgress");
+
+    // CRITICAL: when the volunteer has already accepted this case (or is in
+    // progress), DO NOT reset their flow/tab/banner. We only refresh the
+    // tracking-relevant fields (location, ETA, distance) and bail out — the
+    // poller and socket handlers must never bounce the volunteer off
+    // AcceptedScreen / InProgressScreen back to the alerts list.
+    if (isMidResponse) {
+      setVolunteerEmergencyState((prev) => ({
+        ...prev,
+        caseId: incoming.id,
+        caseLabel: incoming.caseNumber,
+        emergencyType: incoming.emergencyType,
+        etaMinutes: volunteerEta,
+        distanceKm: estimatedDistanceKm,
+        patientSummary: summary || prev.patientSummary,
+        urgencyLabel,
+        safeAccess: incoming.address || prev.safeAccess,
+        callerDetailsPending: pending
+      }));
+      setVolunteerCaseLocation({
+        latitude: incoming.location.latitude,
+        longitude: incoming.location.longitude
+      });
+      setVolunteerHasActiveEmergency(true);
+      lastSyncedVolunteerCaseIdRef.current = incoming.id;
+      lastVolunteerCallerDetailsPendingRef.current = pending;
+      return;
+    }
 
     setVolunteerEmergencyState({
       caseId: incoming.id,
@@ -465,22 +517,13 @@ export default function App() {
     });
     setVolunteerHasActiveEmergency(true);
     setVolunteerCaseVersion((value) => value + 1);
-    // Don't yank the volunteer out of the AcceptedScreen / InProgressScreen
-    // when polling refreshes their own active case. Only force a tab/flow
-    // reset when this is a brand new case the volunteer hasn't taken yet,
-    // or when they were already on the alerts/incoming screen.
     setVolunteerTab((currentTab) => {
       if (!isNewCase && (currentTab === "history" || currentTab === "profile")) {
         return currentTab;
       }
       return "alerts";
     });
-    setVolunteerFlow((currentFlow) => {
-      if (sameCase && (currentFlow === "accepted" || currentFlow === "inProgress")) {
-        return currentFlow;
-      }
-      return "incoming";
-    });
+    setVolunteerFlow("incoming");
     if (isNewCase) {
       setVolunteerBanner(
         pending
@@ -492,7 +535,7 @@ export default function App() {
     }
     lastSyncedVolunteerCaseIdRef.current = incoming.id;
     lastVolunteerCallerDetailsPendingRef.current = pending;
-  }, []);
+  }, [setVolunteerFlow]);
 
   const setPendingAfterCall = (value: boolean) => {
     pendingEmergencyAfterCallRef.current = value;
