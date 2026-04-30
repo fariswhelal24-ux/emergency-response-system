@@ -500,7 +500,11 @@ export const emergencyService = {
           ? { callerUserId: linkedCallerUserId }
           : {})
       },
-      auth.role === "CITIZEN" && !isVolunteerCaller ? { callerDetailsPendingForVolunteers: true } : undefined
+      // Citizen-initiated mobile calls already include the location and call type
+      // up-front via /emergency/init, so volunteers can immediately accept.
+      // The legacy "details pending" gate was designed for dispatcher-driven
+      // intake where transcription would come later — we no longer need it here.
+      undefined
     );
   },
 
