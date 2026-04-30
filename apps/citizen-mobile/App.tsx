@@ -43,6 +43,7 @@ import {
   getCitizenMedicalProfile,
   getCitizenUserProfile,
   getCitizenSocketBaseUrl,
+  completeCallerDetails,
   initEmergencyCall,
   listCitizenEmergencies,
   loginCitizenAccount,
@@ -464,8 +465,22 @@ export default function App() {
     });
     setVolunteerHasActiveEmergency(true);
     setVolunteerCaseVersion((value) => value + 1);
-    setVolunteerTab("alerts");
-    setVolunteerFlow("incoming");
+    // Don't yank the volunteer out of the AcceptedScreen / InProgressScreen
+    // when polling refreshes their own active case. Only force a tab/flow
+    // reset when this is a brand new case the volunteer hasn't taken yet,
+    // or when they were already on the alerts/incoming screen.
+    setVolunteerTab((currentTab) => {
+      if (!isNewCase && (currentTab === "history" || currentTab === "profile")) {
+        return currentTab;
+      }
+      return "alerts";
+    });
+    setVolunteerFlow((currentFlow) => {
+      if (sameCase && (currentFlow === "accepted" || currentFlow === "inProgress")) {
+        return currentFlow;
+      }
+      return "incoming";
+    });
     if (isNewCase) {
       setVolunteerBanner(
         pending
@@ -1309,6 +1324,11 @@ export default function App() {
         if (volunteerFlow === "incoming" && volunteerHasActiveEmergency) {
           return;
         }
+        // Volunteer is mid-response (accepted or in progress) — never tear
+        // their case state down just because the active list briefly drops it.
+        if (volunteerFlow === "accepted" || volunteerFlow === "inProgress") {
+          return;
+        }
         setVolunteerHasActiveEmergency(false);
         setVolunteerEmergencyState(defaultVolunteerEmergencyState);
         setVolunteerAmbulanceLocation(null);
@@ -1436,6 +1456,9 @@ export default function App() {
       if (!incoming) {
         // Keep alert visible until volunteer explicitly accepts/rejects.
         if (volunteerFlow === "incoming" && volunteerHasActiveEmergency) {
+          return;
+        }
+        if (volunteerFlow === "accepted" || volunteerFlow === "inProgress") {
           return;
         }
         setVolunteerHasActiveEmergency(false);
@@ -2177,7 +2200,17 @@ export default function App() {
           if (!activeCaseId) {
             return;
           }
-          await sendEmergencyUpdate(activeCaseId, message);
+          const trimmed = message.trim();
+          await sendEmergencyUpdate(activeCaseId, trimmed);
+          // First time the citizen submits real context (description/voice),
+          // mark caller details as completed so volunteers can accept.
+          if (trimmed.length > 0) {
+            try {
+              await completeCallerDetails(activeCaseId, { voiceDescription: trimmed });
+            } catch (error) {
+              console.warn("[Citizen] failed to mark caller details completed", error);
+            }
+          }
           setBanner("Additional info sent to dispatcher and responders.");
         }}
         onContactVolunteer={() => {

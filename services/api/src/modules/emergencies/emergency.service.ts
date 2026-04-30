@@ -500,11 +500,13 @@ export const emergencyService = {
           ? { callerUserId: linkedCallerUserId }
           : {})
       },
-      // Citizen-initiated mobile calls already include the location and call type
-      // up-front via /emergency/init, so volunteers can immediately accept.
-      // The legacy "details pending" gate was designed for dispatcher-driven
-      // intake where transcription would come later — we no longer need it here.
-      undefined
+      // Citizen-initiated mobile calls start in "details pending" — the alert
+      // fans out to nearby volunteers immediately, but with the patientSummary
+      // intentionally empty until the citizen submits more context. The
+      // citizen mobile app calls /emergencies/:caseId/caller-details-completed
+      // once the user submits an update on the dispatched screen, which clears
+      // the flag so volunteers can accept the case.
+      auth.role === "CITIZEN" && !isVolunteerCaller ? { callerDetailsPendingForVolunteers: true } : undefined
     );
   },
 
@@ -577,6 +579,55 @@ export const emergencyService = {
 
     if (input.status === "CLOSED" || input.status === "CANCELLED") {
       virtualAmbulanceService.stopForCase(caseId);
+    }
+
+    return toCaseDto(updated);
+  },
+
+  /**
+   * Citizen-callable: marks the caller's case details as fully provided so
+   * volunteers waiting on the broadcast alert can finally accept it.
+   * The notification fan-out is triggered the same way it would be for a
+   * dispatcher-driven /details update.
+   */
+  completeCallerDetails: async (
+    auth: AuthContext,
+    caseId: string,
+    input: { voiceDescription?: string; aiAnalysis?: string; transcriptionText?: string }
+  ) => {
+    const existing = await emergencyRepository.findCaseById(caseId);
+
+    if (!existing) {
+      throw new AppError("Emergency case not found", 404);
+    }
+
+    if (auth.role !== "ADMIN" && existing.reporting_user_id !== auth.userId) {
+      throw new AppError("Only the reporting citizen can submit caller details", 403);
+    }
+
+    const hadCallerDetailsPending = Boolean(existing.caller_details_pending);
+
+    const updated = await emergencyRepository.updateCaseDetails({
+      caseId,
+      voiceDescription: input.voiceDescription ?? existing.voice_description ?? undefined,
+      aiAnalysis: input.aiAnalysis ?? existing.ai_analysis ?? undefined,
+      transcriptionText: input.transcriptionText ?? existing.transcription_text ?? undefined
+    });
+
+    if (!updated) {
+      throw new AppError("Emergency case could not be updated", 500);
+    }
+
+    await emergencyRepository.createEmergencyUpdate({
+      caseId,
+      authorUserId: auth.userId,
+      updateType: "CALLER_DETAILS_COMPLETED",
+      message: "Caller submitted case details",
+      payload: { hadCallerDetailsPending }
+    });
+
+    if (hadCallerDetailsPending) {
+      await notifyVolunteersCaseDetailsReady(caseId, updated);
     }
 
     return toCaseDto(updated);

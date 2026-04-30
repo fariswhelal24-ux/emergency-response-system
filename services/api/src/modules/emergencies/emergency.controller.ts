@@ -251,6 +251,32 @@ export const emergencyController = {
     });
   },
 
+  completeCallerDetails: async (request: Request, response: Response): Promise<void> => {
+    const auth = getAuthContext(request);
+    const caseId = getRequiredRouteParam(request.params.caseId, "caseId");
+    const body = (request.body ?? {}) as {
+      voiceDescription?: string;
+      aiAnalysis?: string;
+      transcriptionText?: string;
+    };
+
+    const updatedCase = await emergencyService.completeCallerDetails(auth, caseId, body);
+
+    emitEmergencyUpdate(updatedCase.id, {
+      caseId: updatedCase.id,
+      updateType: "CALLER_DETAILS_COMPLETED",
+      actorUserId: auth.userId,
+      actorRole: auth.role,
+      updatedAt: updatedCase.updatedAt,
+      case: updatedCase
+    });
+
+    response.json({
+      message: "Caller details completed",
+      data: updatedCase
+    });
+  },
+
   assignAmbulance: async (request: Request, response: Response): Promise<void> => {
     const auth = getAuthContext(request);
     const caseId = getRequiredRouteParam(request.params.caseId, "caseId");

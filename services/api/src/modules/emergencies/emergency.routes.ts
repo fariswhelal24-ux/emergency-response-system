@@ -55,6 +55,11 @@ emergencyRoutes.post(
   asyncHandler(emergencyController.volunteerRespond)
 );
 emergencyRoutes.post(
+  "/:caseId/caller-details-completed",
+  authorizeRoles("CITIZEN", "ADMIN"),
+  asyncHandler(emergencyController.completeCallerDetails)
+);
+emergencyRoutes.post(
   "/:caseId/updates",
   validateBody(sendEmergencyUpdateSchema),
   asyncHandler(emergencyController.addEmergencyUpdate)

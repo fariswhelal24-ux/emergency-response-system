@@ -867,6 +867,24 @@ export const sendEmergencyUpdate = async (caseId: string, message: string) => {
   return payload?.data;
 };
 
+/**
+ * Tell the API that the citizen has now provided enough context for the case
+ * (description / voice / typed details). The server will clear the
+ * caller_details_pending flag, refresh the broadcast notification, and
+ * re-emit the alert so any volunteers waiting on it can finally accept.
+ */
+export const completeCallerDetails = async (
+  caseId: string,
+  details: { voiceDescription?: string; aiAnalysis?: string; transcriptionText?: string } = {}
+) => {
+  const payload = await request<{ data?: unknown }>(`/emergencies/${caseId}/caller-details-completed`, {
+    method: "POST",
+    body: JSON.stringify(details)
+  });
+
+  return payload?.data;
+};
+
 export const sendCitizenLocationUpdate = async (input: {
   caseId?: string;
   latitude: number;
