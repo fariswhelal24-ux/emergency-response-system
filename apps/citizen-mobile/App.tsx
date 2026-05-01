@@ -1251,7 +1251,7 @@ export default function App() {
 
     const autoCheckForUpdates = async () => {
       try {
-        if (typeof Updates.checkForUpdateAsync !== "function") {
+        if (!Updates.isEnabled || typeof Updates.checkForUpdateAsync !== "function") {
           return;
         }
         const check = await Updates.checkForUpdateAsync();
@@ -1265,11 +1265,14 @@ export default function App() {
             return;
           }
           if (fetched && fetched.isNew) {
-            setUpdateStatus("New version ready. Reloading...");
-            await Updates.reloadAsync();
+            // Do not auto-reload here: calling reloadAsync immediately after opening
+            // an exp:// update deep link often shows a long white screen and can feel
+            // like the app is broken. User can tap "Force Refresh App" or restart.
+            setUpdateStatus("Update ready — tap Force Refresh App to apply.");
           }
         }
       } catch {
+        // Expected in Expo Go / dev where updates APIs reject.
       }
     };
 

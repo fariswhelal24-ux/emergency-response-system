@@ -1,6 +1,14 @@
-import { useMemo } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  Linking,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View
+} from "react-native";
 
 type Region = {
   latitude: number;
@@ -52,6 +60,42 @@ const createRegion = (points: Coordinate[]): Region => {
   };
 };
 
+const staticPreviewUrl = (lat: number, lng: number) =>
+  `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=15&size=640x360&maptype=mapnik`;
+
+const StaticMapPreview = ({ lat, lng }: { lat: number; lng: number }) => {
+  const uri = staticPreviewUrl(lat, lng);
+  const open = () => {
+    const url =
+      Platform.OS === "ios"
+        ? `http://maps.apple.com/?ll=${lat},${lng}&q=Incident`
+        : `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    void Linking.openURL(url);
+  };
+
+  return (
+    <View style={styles.wrapper}>
+      <Image source={{ uri }} style={styles.map} resizeMode="cover" />
+      <View style={styles.staticOverlay} pointerEvents="box-none">
+        <Pressable style={({ pressed }) => [styles.openMaps, pressed && { opacity: 0.9 }]} onPress={open}>
+          <Text style={styles.openMapsText}>Open in Maps</Text>
+        </Pressable>
+      </View>
+      <View style={styles.badge} pointerEvents="none">
+        <Text style={styles.badgeText}>Map preview</Text>
+      </View>
+    </View>
+  );
+};
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic react-native-maps import */
+type MapsPack = {
+  MapView: ComponentType<any>;
+  Marker: ComponentType<any>;
+  Polyline: ComponentType<any>;
+  PROVIDER_GOOGLE: string | undefined;
+};
+
 export const IncidentMap = ({
   patientLocation,
   volunteerLocation,
@@ -63,6 +107,40 @@ export const IncidentMap = ({
   ambulanceLocation?: Coordinate;
   routeGeometry?: Coordinate[];
 }) => {
+  const [maps, setMaps] = useState<MapsPack | "unavailable" | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const m = await import("react-native-maps");
+        if (cancelled) {
+          return;
+        }
+        const MapView = m.default;
+        const Marker = m.Marker;
+        const Polyline = m.Polyline;
+        if (typeof MapView !== "function" || typeof Marker !== "function" || typeof Polyline !== "function") {
+          setMaps("unavailable");
+          return;
+        }
+        setMaps({
+          MapView: MapView as ComponentType<any>,
+          Marker: Marker as ComponentType<any>,
+          Polyline: Polyline as ComponentType<any>,
+          PROVIDER_GOOGLE: m.PROVIDER_GOOGLE as string | undefined
+        });
+      } catch {
+        if (!cancelled) {
+          setMaps("unavailable");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const markers = useMemo(() => {
     const next: Array<{ key: string; coordinate: Coordinate; title: string; pinColor: string }> = [];
 
@@ -109,6 +187,32 @@ export const IncidentMap = ({
     return [volunteerLocation, patientLocation];
   }, [patientLocation, routeGeometry, volunteerLocation]);
 
+  const previewCenter = useMemo(() => {
+    const pts = markers.map((m) => m.coordinate);
+    if (pts.length === 0) {
+      return DEFAULT_CENTER;
+    }
+    return {
+      latitude: pts.reduce((s, p) => s + p.latitude, 0) / pts.length,
+      longitude: pts.reduce((s, p) => s + p.longitude, 0) / pts.length
+    };
+  }, [markers]);
+
+  if (maps === null) {
+    return (
+      <View style={[styles.wrapper, styles.loadingWrap]}>
+        <ActivityIndicator size="large" color="#1E63FF" />
+        <Text style={styles.loadingText}>Loading map…</Text>
+      </View>
+    );
+  }
+
+  if (maps === "unavailable") {
+    return <StaticMapPreview lat={previewCenter.latitude} lng={previewCenter.longitude} />;
+  }
+
+  const { MapView, Marker, Polyline, PROVIDER_GOOGLE } = maps;
+
   return (
     <View style={styles.wrapper}>
       <MapView
@@ -150,9 +254,38 @@ const styles = StyleSheet.create({
     borderColor: "#D9E6F3",
     backgroundColor: "#E8F0FA"
   },
+  loadingWrap: {
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10
+  },
+  loadingText: {
+    color: "#5C738C",
+    fontSize: 13,
+    fontWeight: "600"
+  },
   map: {
     width: "100%",
     height: "100%"
+  },
+  staticOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "flex-end",
+    alignItems: "flex-end",
+    padding: 10
+  },
+  openMaps: {
+    backgroundColor: "rgba(255,255,255,0.95)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#C9DBF5"
+  },
+  openMapsText: {
+    color: "#1E63FF",
+    fontWeight: "800",
+    fontSize: 12
   },
   badge: {
     position: "absolute",
