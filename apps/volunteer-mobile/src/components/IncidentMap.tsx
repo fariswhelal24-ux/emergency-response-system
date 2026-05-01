@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 
 type Region = {
   latitude: number;
@@ -62,17 +63,6 @@ export const IncidentMap = ({
   ambulanceLocation?: Coordinate;
   routeGeometry?: Coordinate[];
 }) => {
-  const mapsModule = useMemo(() => {
-    try {
-      // react-native-maps works in Expo Go for SDK 50+.
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const maps = require("react-native-maps");
-      return maps;
-    } catch {
-      return null;
-    }
-  }, []);
-
   const markers = useMemo(() => {
     const next: Array<{ key: string; coordinate: Coordinate; title: string; pinColor: string }> = [];
 
@@ -88,8 +78,8 @@ export const IncidentMap = ({
       next.push({
         key: "volunteer",
         coordinate: volunteerLocation,
-        title: "Volunteer",
-        pinColor: "#1E88E5"
+        title: "You",
+        pinColor: "#1E63FF"
       });
     }
     if (ambulanceLocation) {
@@ -119,34 +109,21 @@ export const IncidentMap = ({
     return [volunteerLocation, patientLocation];
   }, [patientLocation, routeGeometry, volunteerLocation]);
 
-  if (!mapsModule?.default || !mapsModule?.Marker || !mapsModule?.Polyline) {
-    return (
-      <View style={styles.wrapper}>
-        <View style={styles.fallback}>
-          <Text style={styles.fallbackTitle}>Live map needs a dev build</Text>
-          <Text style={styles.fallbackText}>
-            Incident GPS is updating. Install a dev client to render native maps on iOS.
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
-  const MapView = mapsModule.default;
-  const Marker = mapsModule.Marker;
-  const Polyline = mapsModule.Polyline;
-  const providerGoogle = mapsModule.PROVIDER_GOOGLE;
-
   return (
     <View style={styles.wrapper}>
       <MapView
         style={styles.map}
         initialRegion={region}
-        provider={Platform.OS === "android" ? providerGoogle : undefined}
+        region={region}
+        provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
+        showsUserLocation={false}
+        showsMyLocationButton={false}
         toolbarEnabled={false}
+        loadingEnabled
+        mapType="standard"
       >
         {volunteerToPatientLine.length >= 2 ? (
-          <Polyline coordinates={volunteerToPatientLine} strokeColor="#1E88E5" strokeWidth={4} />
+          <Polyline coordinates={volunteerToPatientLine} strokeColor="#1E63FF" strokeWidth={5} lineCap="round" />
         ) : null}
         {markers.map((item) => (
           <Marker
@@ -157,8 +134,8 @@ export const IncidentMap = ({
           />
         ))}
       </MapView>
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>Live Navigation</Text>
+      <View style={styles.badge} pointerEvents="none">
+        <Text style={styles.badgeText}>Live map</Text>
       </View>
     </View>
   );
@@ -170,7 +147,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#D9E6F3"
+    borderColor: "#D9E6F3",
+    backgroundColor: "#E8F0FA"
   },
   map: {
     width: "100%",
@@ -180,33 +158,20 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 8,
     left: 8,
-    backgroundColor: "rgba(255,255,255,0.92)",
+    backgroundColor: "rgba(255,255,255,0.94)",
     borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 4
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: "rgba(30,99,255,0.2)",
+    shadowColor: "#0F2E5A",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3
   },
   badgeText: {
-    color: "#284A6A",
-    fontSize: 11,
-    fontWeight: "700"
-  },
-  fallback: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F2F7FC",
-    paddingHorizontal: 16
-  },
-  fallbackTitle: {
     color: "#1C3856",
-    fontWeight: "800",
-    fontSize: 13
-  },
-  fallbackText: {
-    marginTop: 6,
-    color: "#5C738C",
     fontSize: 11,
-    textAlign: "center",
-    lineHeight: 16
+    fontWeight: "800"
   }
 });

@@ -441,6 +441,8 @@ export default function App() {
   const pendingEmergencyAfterCallRef = useRef(false);
   const activeCallEmergencyIdRef = useRef<string>("");
   const citizenSocketRef = useRef<Socket | null>(null);
+  /** Clears transient volunteer snackbars (e.g. after Accept). */
+  const volunteerBannerDismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const emergencyPhone = "+970569039023";
 
@@ -1275,6 +1277,15 @@ export default function App() {
 
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (volunteerBannerDismissTimeoutRef.current) {
+        clearTimeout(volunteerBannerDismissTimeoutRef.current);
+        volunteerBannerDismissTimeoutRef.current = null;
+      }
     };
   }, []);
 
@@ -2367,6 +2378,13 @@ export default function App() {
                 setVolunteerHasActiveEmergency(true);
                 setVolunteerFlow("accepted");
                 setVolunteerBanner("Ambulance call started. Emergency accepted and route started.");
+                if (volunteerBannerDismissTimeoutRef.current) {
+                  clearTimeout(volunteerBannerDismissTimeoutRef.current);
+                }
+                volunteerBannerDismissTimeoutRef.current = setTimeout(() => {
+                  volunteerBannerDismissTimeoutRef.current = null;
+                  setVolunteerBanner("");
+                }, 10_000);
                 return;
               }
 
