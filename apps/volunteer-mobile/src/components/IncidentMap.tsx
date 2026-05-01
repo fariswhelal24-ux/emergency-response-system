@@ -27,6 +27,17 @@ const DEFAULT_CENTER: Coordinate = {
   longitude: 35.2024
 };
 
+const isRenderableComponent = (c: unknown): boolean => {
+  if (typeof c === "function") {
+    return true;
+  }
+  if (typeof c === "object" && c !== null) {
+    const o = c as Record<string, unknown>;
+    return typeof o.render === "function" || "$$typeof" in o;
+  }
+  return false;
+};
+
 const createRegion = (points: Coordinate[]): Region => {
   if (points.length === 0) {
     return {
@@ -120,7 +131,7 @@ export const IncidentMap = ({
         const MapView = m.default;
         const Marker = m.Marker;
         const Polyline = m.Polyline;
-        if (typeof MapView !== "function" || typeof Marker !== "function" || typeof Polyline !== "function") {
+        if (!isRenderableComponent(MapView) || !isRenderableComponent(Marker) || !isRenderableComponent(Polyline)) {
           setMaps("unavailable");
           return;
         }
